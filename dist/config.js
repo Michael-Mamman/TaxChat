@@ -1,6 +1,13 @@
 import dotenv from "dotenv";
+import Anthropic from "@anthropic-ai/sdk";
 dotenv.config();
-console.log('[config::module] ENTER - loading env');
+console.log("[config::module] ENTER - loading env");
+// === Anthropic (Claude) ===
+export const AKRAA_AI_API_KEY = process.env.AKRAA_AI_API_KEY || "";
+export const anthropic = new Anthropic({ apiKey: AKRAA_AI_API_KEY });
+console.log("[config::module] anthropic client initialized", {
+    hasKey: !!AKRAA_AI_API_KEY,
+});
 // === Server ===
 export const NODE_ENV = process.env.NODE_ENV;
 export const PORT = process.env.PORT || 3000;
@@ -24,7 +31,9 @@ export const FLOW_IDS = {
     WHT_CREDIT_NOTE: process.env.WHT_CREDIT_NOTE_FLOW || "",
     GENERAL_ENQUIRY: process.env.GENERAL_ENQUIRY_FLOW || "",
 };
-console.log('[config::module] FLOW_IDS loaded', { count: Object.keys(FLOW_IDS).length });
+console.log("[config::module] FLOW_IDS loaded", {
+    count: Object.keys(FLOW_IDS).length,
+});
 // === External Integration URLs ===
 export const ITSM_BASE_URL = process.env.ITSM_BASE_URL || "";
 export const ITSM_API_KEY = process.env.ITSM_API_KEY || "";
@@ -42,7 +51,6 @@ export const NIBSS_API_KEY = process.env.NIBSS_API_KEY || "";
 export const SMS_GATEWAY_URL = process.env.SMS_GATEWAY_URL || "";
 export const SMS_API_KEY = process.env.SMS_API_KEY || "";
 export const AKRAA_AI_URL = process.env.AKRAA_AI_URL || "";
-export const AKRAA_AI_API_KEY = process.env.AKRAA_AI_API_KEY || "";
 export const TAXLY_BASE_URL = process.env.TAXLY_BASE_URL || "";
 export const TAXLY_API_KEY = process.env.TAXLY_API_KEY || "";
 export const CIN_BASE_URL = process.env.CIN_BASE_URL || "";
@@ -56,11 +64,11 @@ export const MAX_OTP_ATTEMPTS = Number(process.env.MAX_OTP_ATTEMPTS) || 3;
 // === Logging ===
 const LOG_ALL_SECRETS = process.env.NODE_ENV === "development";
 if (LOG_ALL_SECRETS) {
-    console.log('[config::module] branch: development - logging non-secret values');
+    console.log("[config::module] branch: development - logging non-secret values");
     console.log("[config] loaded:", { NODE_ENV, PORT, PHONE_NUMBER_ID });
 }
 else {
-    console.log('[config::module] branch: non-development - logging presence only');
+    console.log("[config::module] branch: non-development - logging presence only");
     console.log("[config] secrets_present:", {
         NODE_ENV: Boolean(NODE_ENV),
         PORT: Boolean(PORT),
@@ -69,4 +77,4 @@ else {
         MONGO_URI: Boolean(MONGO_URI),
     });
 }
-console.log('[config::module] EXIT - config module loaded');
+console.log("[config::module] EXIT - config module loaded");

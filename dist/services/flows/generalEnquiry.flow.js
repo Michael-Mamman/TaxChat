@@ -1,4 +1,4 @@
-import akraaAI from "../integrations/akraa-ai.service.js";
+import akraaAI from "../integrations/claude.service.js";
 /**
  * General Enquiry Flow (Tier 0 - No auth required)
  *

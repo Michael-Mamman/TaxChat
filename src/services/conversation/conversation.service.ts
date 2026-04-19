@@ -1,6 +1,6 @@
 import ConversationContext from "../../models/conversationContext.model.js";
 import Taxpayer from "../../models/taxpayer.model.js";
-import akraaAI from "../integrations/akraa-ai.service.js";
+import akraaAI from "../integrations/claude.service.js";
 import authService from "../auth/auth.service.js";
 import sessionService from "../auth/session.service.js";
 import flowRouter from "../flows/flowRouter.service.js";
