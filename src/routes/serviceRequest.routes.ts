@@ -1,0 +1,20 @@
+import { Router } from "express";
+import {
+  createServiceRequest,
+  getServiceRequest,
+  getServiceRequestByReference,
+  updateServiceRequest,
+  listServiceRequests,
+  listByTaxpayer,
+} from "../controller/serviceRequest.controller.js";
+
+const router = Router();
+
+router.get("/", listServiceRequests);
+router.post("/", createServiceRequest);
+router.get("/ref/:reference", getServiceRequestByReference);
+router.get("/taxpayer/:phone", listByTaxpayer);
+router.get("/:id", getServiceRequest);
+router.patch("/:id", updateServiceRequest);
+
+export default router;
