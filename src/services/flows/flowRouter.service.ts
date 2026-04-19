@@ -297,6 +297,25 @@ class FlowRouterService {
           await this.startFlow(phone, pendingFlow);
         }
       }
+    } else if (awaiting === "kyc") {
+      console.log('[flowRouter.service::handleAuthInput] branch: verifying KYC (NIN)');
+      const result = await authService.verifyKYC(phone, input);
+      await whatsappService.sendMessage(phone, result.message);
+
+      if (result.success) {
+        console.log('[flowRouter.service::handleAuthInput] branch: KYC verified');
+        const pendingFlow = context.pending_auth_flow as FlowName | undefined;
+        if (pendingFlow) {
+          console.log('[flowRouter.service::handleAuthInput] branch: resuming pending flow', { pendingFlow });
+          await this.startFlow(phone, pendingFlow);
+        }
+      }
+    } else {
+      console.log('[flowRouter.service::handleAuthInput] branch: unknown awaiting_input value', { awaiting });
+      await whatsappService.sendMessage(
+        phone,
+        "Something went wrong with your session. Type MENU to start over.",
+      );
     }
     console.log('[flowRouter.service::handleAuthInput] EXIT', { awaiting });
   }
