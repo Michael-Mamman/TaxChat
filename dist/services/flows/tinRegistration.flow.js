@@ -14,10 +14,14 @@ import ConversationContext from "../../models/conversationContext.model.js";
  */
 class TinRegistrationFlow {
     async start(phone, entities) {
+        console.log('[tinRegistration.flow::start] ENTER', { phone, entityKeys: entities ? Object.keys(entities) : [] });
         // If the NLU already extracted a category, skip step 0
         if (entities?.category) {
+            console.log('[tinRegistration.flow::start] branch: entities.category provided');
             const category = entities.category.toLowerCase();
             if (category === "individual" || category === "business") {
+                console.log('[tinRegistration.flow::start] branch: valid category - skip to step 1', { category });
+                console.log('[tinRegistration.flow::start] EXIT', { next_step: 1, awaiting_input: 'nin' });
                 return {
                     message: `Great, you'd like to register for a TIN as *${category === "individual" ? "an Individual" : "a Business"}*.\n\n` +
                         "To verify your identity, please provide your *National Identification Number (NIN)*.\n\n" +
@@ -28,6 +32,8 @@ class TinRegistrationFlow {
                 };
             }
         }
+        console.log('[tinRegistration.flow::start] branch: default - ask category');
+        console.log('[tinRegistration.flow::start] EXIT', { next_step: 0, awaiting_input: 'category' });
         return {
             message: "Welcome to TIN Registration! I'll help you obtain your Taxpayer Identification Number.\n\n" +
                 "First, please select your registration category:",
@@ -49,13 +55,17 @@ class TinRegistrationFlow {
         };
     }
     async handleInput(phone, input, step, data) {
+        console.log('[tinRegistration.flow::handleInput] ENTER', { phone, step, inputLen: input.length });
         switch (step) {
             // ------------------------------------------------------------------
             // Step 0: Capture registration category
             // ------------------------------------------------------------------
             case 0: {
+                console.log('[tinRegistration.flow::handleInput] branch: case 0 - capture category');
                 const category = input.trim().toLowerCase();
                 if (category !== "individual" && category !== "business") {
+                    console.log('[tinRegistration.flow::handleInput] branch: invalid category');
+                    console.log('[tinRegistration.flow::handleInput] EXIT', { next_step: 0, awaiting_input: 'category' });
                     return {
                         message: "I didn't quite get that. Please select one of the options below:",
                         menu_options: [
@@ -75,6 +85,8 @@ class TinRegistrationFlow {
                     };
                 }
                 data.category = category;
+                console.log('[tinRegistration.flow::handleInput] branch: valid category', { category });
+                console.log('[tinRegistration.flow::handleInput] EXIT', { next_step: 1, awaiting_input: 'nin' });
                 return {
                     message: `You selected *${category === "individual" ? "Individual" : "Business"}* registration.\n\n` +
                         "To verify your identity, please provide your *National Identification Number (NIN)*.\n\n" +
@@ -87,9 +99,12 @@ class TinRegistrationFlow {
             // Step 1: Collect and validate NIN
             // ------------------------------------------------------------------
             case 1: {
+                console.log('[tinRegistration.flow::handleInput] branch: case 1 - NIN validation');
                 const nin = input.trim().replace(/\s/g, "");
                 // Basic NIN format validation (11 digits)
                 if (!/^\d{11}$/.test(nin)) {
+                    console.log('[tinRegistration.flow::handleInput] branch: invalid NIN format');
+                    console.log('[tinRegistration.flow::handleInput] EXIT', { next_step: 1, awaiting_input: 'nin' });
                     return {
                         message: "That doesn't look like a valid NIN. A NIN is exactly *11 digits* long.\n\n" +
                             "Please re-enter your NIN:",
@@ -98,6 +113,7 @@ class TinRegistrationFlow {
                     };
                 }
                 data.nin = nin;
+                console.log('[tinRegistration.flow::handleInput] branch: valid NIN captured (masked)');
                 const detailsPrompt = data.category === "individual"
                     ? "Now I need your personal details. Please reply with the following, each on a new line:\n\n" +
                         "1. *Full Name* (First Middle Last)\n" +
@@ -115,6 +131,7 @@ class TinRegistrationFlow {
                         "Nwosu Enterprises Ltd\n" +
                         "10/01/2017\n" +
                         "5 Commerce Avenue, Abuja, FCT";
+                console.log('[tinRegistration.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'personal_details' });
                 return {
                     message: detailsPrompt,
                     next_step: 2,
@@ -125,13 +142,16 @@ class TinRegistrationFlow {
             // Step 2: Collect personal / business details
             // ------------------------------------------------------------------
             case 2: {
+                console.log('[tinRegistration.flow::handleInput] branch: case 2 - personal details');
                 const lines = input
                     .trim()
                     .split("\n")
                     .map((l) => l.trim())
                     .filter(Boolean);
                 if (lines.length < 3) {
+                    console.log('[tinRegistration.flow::handleInput] branch: insufficient detail lines', { count: lines.length });
                     const isIndividual = data.category === "individual";
+                    console.log('[tinRegistration.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'personal_details' });
                     return {
                         message: "I need all three pieces of information. Please provide them on separate lines:\n\n" +
                             `1. *${isIndividual ? "Full Name" : "Business Name"}*\n` +
@@ -144,6 +164,8 @@ class TinRegistrationFlow {
                 const [name, dateStr, address] = lines;
                 // Basic date format validation
                 if (!/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+                    console.log('[tinRegistration.flow::handleInput] branch: invalid date format');
+                    console.log('[tinRegistration.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'personal_details' });
                     return {
                         message: "The date format doesn't look right. Please use *DD/MM/YYYY* format.\n\n" +
                             "Send all three details again:\n" +
@@ -157,6 +179,7 @@ class TinRegistrationFlow {
                 data.name = name;
                 data.date = dateStr;
                 data.address = address;
+                console.log('[tinRegistration.flow::handleInput] branch: details captured');
                 const incomePrompt = data.category === "individual"
                     ? "Almost there! Please provide your *source of income* information.\n\n" +
                         "Select one:"
@@ -202,6 +225,7 @@ class TinRegistrationFlow {
                             description: "Other business activity",
                         },
                     ];
+                console.log('[tinRegistration.flow::handleInput] EXIT', { next_step: 3, awaiting_input: 'income_source' });
                 return {
                     message: incomePrompt,
                     menu_options: incomeOptions,
@@ -213,12 +237,15 @@ class TinRegistrationFlow {
             // Step 3: Collect income source / employer details
             // ------------------------------------------------------------------
             case 3: {
+                console.log('[tinRegistration.flow::handleInput] branch: case 3 - income source');
                 const source = input.trim().toLowerCase();
                 const isIndividual = data.category === "individual";
                 const validIndividual = ["employed", "self_employed", "both"];
                 const validBusiness = ["trading", "services", "manufacturing", "other"];
                 const validOptions = isIndividual ? validIndividual : validBusiness;
                 if (!validOptions.includes(source)) {
+                    console.log('[tinRegistration.flow::handleInput] branch: invalid income source');
+                    console.log('[tinRegistration.flow::handleInput] EXIT', { next_step: 3, awaiting_input: 'income_source' });
                     return {
                         message: "Please select one of the options provided:",
                         menu_options: isIndividual
@@ -238,6 +265,7 @@ class TinRegistrationFlow {
                     };
                 }
                 data.income_source = source;
+                console.log('[tinRegistration.flow::handleInput] branch: valid income source', { source });
                 // Build the review summary
                 const summary = isIndividual
                     ? `*Registration Summary*\n\n` +
@@ -254,6 +282,7 @@ class TinRegistrationFlow {
                         `Registered Address: ${data.address}\n` +
                         `NIN (Director): ${data.nin.slice(0, 3)}*****${data.nin.slice(-3)}\n` +
                         `Business Activity: ${source.replace("_", " ")}`;
+                console.log('[tinRegistration.flow::handleInput] EXIT', { next_step: 4, awaiting_input: 'confirmation' });
                 return {
                     message: summary +
                         "\n\nPlease review the information above. Is everything correct?",
@@ -269,12 +298,17 @@ class TinRegistrationFlow {
             // Step 4: Submit registration and create ITSM ticket
             // ------------------------------------------------------------------
             case 4: {
+                console.log('[tinRegistration.flow::handleInput] branch: case 4 - confirmation');
                 const confirmation = input.trim().toLowerCase();
                 if (confirmation === "restart" || confirmation === "start over") {
+                    console.log('[tinRegistration.flow::handleInput] branch: restart');
+                    console.log('[tinRegistration.flow::handleInput] EXIT', { dispatched: 'start' });
                     // Reset and go back to step 0
                     return this.start(phone);
                 }
                 if (confirmation !== "confirm" && confirmation !== "confirm & submit") {
+                    console.log('[tinRegistration.flow::handleInput] branch: invalid confirmation');
+                    console.log('[tinRegistration.flow::handleInput] EXIT', { next_step: 4, awaiting_input: 'confirmation' });
                     return {
                         message: "Please confirm your registration details or choose to start over:",
                         buttons: [
@@ -285,6 +319,7 @@ class TinRegistrationFlow {
                         awaiting_input: "confirmation",
                     };
                 }
+                console.log('[tinRegistration.flow::handleInput] branch: creating TIN-REG ticket');
                 // Create an ITSM ticket for the registration
                 const ticketResult = await itsmService.createTicket({
                     type: "TIN-REG",
@@ -306,6 +341,8 @@ class TinRegistrationFlow {
                     },
                 });
                 if (!ticketResult.success) {
+                    console.log('[tinRegistration.flow::handleInput] branch: ticket creation failed');
+                    console.log('[tinRegistration.flow::handleInput] EXIT', { flow_complete: true, error: 'ticket creation failed' });
                     return {
                         message: "I'm sorry, there was an issue submitting your registration. " +
                             "Please try again later or visit your nearest FIRS tax office for assistance.\n\n" +
@@ -313,6 +350,8 @@ class TinRegistrationFlow {
                         flow_complete: true,
                     };
                 }
+                console.log('[tinRegistration.flow::handleInput] branch: ticket created', { reference: ticketResult.data.reference });
+                console.log('[tinRegistration.flow::handleInput] EXIT', { flow_complete: true });
                 return {
                     message: `Your TIN registration has been submitted successfully!\n\n` +
                         `*Ticket Reference:* ${ticketResult.data.reference}\n` +
@@ -324,6 +363,8 @@ class TinRegistrationFlow {
                 };
             }
             default:
+                console.log('[tinRegistration.flow::handleInput] branch: default case - unknown step');
+                console.log('[tinRegistration.flow::handleInput] EXIT', { next_step: 0, awaiting_input: 'category' });
                 return {
                     message: "Something went wrong. Let's start the TIN registration again.",
                     next_step: 0,

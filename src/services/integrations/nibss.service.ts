@@ -11,8 +11,13 @@ class NIBSSService {
   async verifyBVN(
     bvn: string
   ): Promise<IntegrationResponse<BVNVerificationResult>> {
+    console.log("[nibss.service::verifyBVN] ENTER", {
+      bvnLength: bvn?.length,
+      baseUrl: this.baseUrl,
+    });
     console.log("[NIBSS] verifyBVN stub called:", bvn);
 
+    console.log("[nibss.service::verifyBVN] EXIT", { status: 200, is_valid: true });
     return {
       success: true,
       message: "BVN verified successfully (stub)",
@@ -31,8 +36,13 @@ class NIBSSService {
   async getBVNDetails(
     bvn: string
   ): Promise<IntegrationResponse<BVNVerificationResult>> {
+    console.log("[nibss.service::getBVNDetails] ENTER", {
+      bvnLength: bvn?.length,
+      baseUrl: this.baseUrl,
+    });
     console.log("[NIBSS] getBVNDetails stub called:", bvn);
 
+    console.log("[nibss.service::getBVNDetails] EXIT", { status: 200 });
     return {
       success: true,
       message: "BVN details retrieved successfully (stub)",

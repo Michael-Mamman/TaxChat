@@ -18,11 +18,16 @@ class TaxClearanceFlow {
     phone: string,
     entities?: Record<string, string>,
   ): Promise<FlowStepResult> {
+    console.log('[taxClearance.flow::start] ENTER', { phone, entityKeys: entities ? Object.keys(entities) : [] });
     // If TIN was already extracted or available from session
     if (entities?.tin) {
+      console.log('[taxClearance.flow::start] branch: entities.tin provided');
+      console.log('[taxClearance.flow::start] EXIT', { dispatched: 'checkCompliance' });
       return this.checkCompliance(phone, entities.tin);
     }
 
+    console.log('[taxClearance.flow::start] branch: default - ask TIN');
+    console.log('[taxClearance.flow::start] EXIT', { next_step: 0, awaiting_input: 'tin' });
     return {
       message:
         "I can help you with your Tax Clearance Certificate (TCC).\n\n" +
@@ -41,14 +46,18 @@ class TaxClearanceFlow {
     step: number,
     data: Record<string, unknown>,
   ): Promise<FlowStepResult> {
+    console.log('[taxClearance.flow::handleInput] ENTER', { phone, step, inputLen: input.length });
     switch (step) {
       // ------------------------------------------------------------------
       // Step 0: Collect TIN and check compliance
       // ------------------------------------------------------------------
       case 0: {
+        console.log('[taxClearance.flow::handleInput] branch: case 0 - collect TIN');
         const tin = input.trim().replace(/[\s-]/g, "");
 
         if (!/^\d{10}$/.test(tin) && !/^NEW-\d+$/.test(tin)) {
+          console.log('[taxClearance.flow::handleInput] branch: invalid TIN');
+          console.log('[taxClearance.flow::handleInput] EXIT', { next_step: 0, awaiting_input: 'tin' });
           return {
             message:
               "A TIN is a *10-digit number*. Please re-enter your TIN:\n\n" +
@@ -59,6 +68,8 @@ class TaxClearanceFlow {
         }
 
         data.tin = tin;
+        console.log('[taxClearance.flow::handleInput] branch: valid TIN');
+        console.log('[taxClearance.flow::handleInput] EXIT', { dispatched: 'checkCompliance' });
         return this.checkCompliance(phone, tin);
       }
 
@@ -66,11 +77,15 @@ class TaxClearanceFlow {
       // Step 1: Handle compliant / non-compliant result
       // ------------------------------------------------------------------
       case 1: {
+        console.log('[taxClearance.flow::handleInput] branch: case 1 - result handling');
         const choice = input.trim().toLowerCase();
 
         // Compliant path -- user chooses delivery
         if (data.is_compliant) {
+          console.log('[taxClearance.flow::handleInput] branch: compliant path');
           if (choice === "download" || choice === "download tcc") {
+            console.log('[taxClearance.flow::handleInput] branch: download TCC');
+            console.log('[taxClearance.flow::handleInput] EXIT', { flow_complete: true });
             return {
               message:
                 "Your Tax Clearance Certificate is being generated.\n\n" +
@@ -83,6 +98,8 @@ class TaxClearanceFlow {
           }
 
           if (choice === "email" || choice === "send via email") {
+            console.log('[taxClearance.flow::handleInput] branch: email TCC');
+            console.log('[taxClearance.flow::handleInput] EXIT', { flow_complete: true });
             return {
               message:
                 "Your Tax Clearance Certificate will be sent to your registered email.\n\n" +
@@ -94,6 +111,8 @@ class TaxClearanceFlow {
             };
           }
 
+          console.log('[taxClearance.flow::handleInput] branch: compliant default - re-prompt');
+          console.log('[taxClearance.flow::handleInput] EXIT', { next_step: 1, awaiting_input: 'tcc_delivery' });
           return {
             message: "Please select how you'd like to receive your TCC:",
             buttons: [
@@ -106,7 +125,9 @@ class TaxClearanceFlow {
         }
 
         // Non-compliant path -- user chooses resolution
+        console.log('[taxClearance.flow::handleInput] branch: non-compliant path');
         if (choice === "pay_now" || choice === "pay outstanding") {
+          console.log('[taxClearance.flow::handleInput] branch: pay_now');
           const liabilities = data.outstanding_liabilities as Array<{
             tax_type: string;
             balance: number;
@@ -114,6 +135,7 @@ class TaxClearanceFlow {
           }>;
           const total = liabilities.reduce((sum, l) => sum + l.balance, 0);
 
+          console.log('[taxClearance.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'payment_action', total });
           return {
             message:
               `Your total outstanding balance is *NGN ${total.toLocaleString()}*.\n\n` +
@@ -135,11 +157,13 @@ class TaxClearanceFlow {
         }
 
         if (choice === "file_returns" || choice === "file pending returns") {
+          console.log('[taxClearance.flow::handleInput] branch: file_returns');
           const overdue = data.overdue_filings as Array<{
             tax_type: string;
             period?: string;
           }>;
 
+          console.log('[taxClearance.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'filing_action' });
           return {
             message:
               "Here are your outstanding filing obligations:\n\n" +
@@ -159,6 +183,7 @@ class TaxClearanceFlow {
         }
 
         if (choice === "waiver" || choice === "request penalty waiver") {
+          console.log('[taxClearance.flow::handleInput] branch: waiver - creating ITSM ticket');
           // Create ITSM ticket for penalty waiver
           const ticketResult = await itsmService.createTicket({
             type: "PENALTY-WAIVER",
@@ -171,6 +196,7 @@ class TaxClearanceFlow {
             priority: "medium",
           });
 
+          console.log('[taxClearance.flow::handleInput] EXIT', { flow_complete: true, reference: ticketResult.data?.reference });
           return {
             message:
               `A penalty waiver request has been submitted.\n\n` +
@@ -183,6 +209,8 @@ class TaxClearanceFlow {
         }
 
         if (choice === "escalate" || choice === "speak to an officer") {
+          console.log('[taxClearance.flow::handleInput] branch: escalate');
+          console.log('[taxClearance.flow::handleInput] EXIT', { escalate: true, flow_complete: true });
           return {
             message:
               "I'll connect you with a tax officer who can help resolve your compliance issues.\n\n" +
@@ -194,6 +222,8 @@ class TaxClearanceFlow {
         }
 
         // Re-display resolution options
+        console.log('[taxClearance.flow::handleInput] branch: case 1 fallback - rebuild resolution menu');
+        console.log('[taxClearance.flow::handleInput] EXIT', { dispatched: 'buildResolutionMenu' });
         return this.buildResolutionMenu(data);
       }
 
@@ -201,9 +231,12 @@ class TaxClearanceFlow {
       // Step 2: Secondary resolution actions
       // ------------------------------------------------------------------
       case 2: {
+        console.log('[taxClearance.flow::handleInput] branch: case 2 - secondary action');
         const choice = input.trim().toLowerCase();
 
         if (choice === "confirm_payment" || choice === "confirm payment") {
+          console.log('[taxClearance.flow::handleInput] branch: confirm_payment');
+          console.log('[taxClearance.flow::handleInput] EXIT', { flow_complete: true });
           return {
             message:
               "I'll redirect you to Payment Confirmation. One moment...\n\n" +
@@ -213,6 +246,8 @@ class TaxClearanceFlow {
         }
 
         if (choice === "filing_help" || choice === "help me file") {
+          console.log('[taxClearance.flow::handleInput] branch: filing_help');
+          console.log('[taxClearance.flow::handleInput] EXIT', { flow_complete: true });
           return {
             message:
               "I'll redirect you to our Filing Support service. One moment...\n\n" +
@@ -222,6 +257,8 @@ class TaxClearanceFlow {
         }
 
         if (choice === "done" || choice === "i'll pay later" || choice === "i'll file myself") {
+          console.log('[taxClearance.flow::handleInput] branch: done');
+          console.log('[taxClearance.flow::handleInput] EXIT', { flow_complete: true });
           return {
             message:
               "No problem. Remember, you can request your TCC once all obligations are settled.\n\n" +
@@ -230,6 +267,8 @@ class TaxClearanceFlow {
           };
         }
 
+        console.log('[taxClearance.flow::handleInput] branch: case 2 default - re-prompt');
+        console.log('[taxClearance.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'secondary_action' });
         return {
           message: "Please select an option or type *menu* to return to the main menu:",
           buttons: [
@@ -243,6 +282,8 @@ class TaxClearanceFlow {
       }
 
       default:
+        console.log('[taxClearance.flow::handleInput] branch: default case - unknown step');
+        console.log('[taxClearance.flow::handleInput] EXIT', { next_step: 0, awaiting_input: 'tin' });
         return {
           message: "Something went wrong. Let's start the TCC process again.",
           next_step: 0,
@@ -256,9 +297,12 @@ class TaxClearanceFlow {
     phone: string,
     tin: string,
   ): Promise<FlowStepResult> {
+    console.log('[taxClearance.flow::checkCompliance] ENTER', { phone, tinPreview: tin.slice(0, 3) + '***' });
     const compliance = await taxPromaxService.getComplianceStatus(tin);
 
     if (!compliance.success || !compliance.data) {
+      console.log('[taxClearance.flow::checkCompliance] branch: compliance lookup failed');
+      console.log('[taxClearance.flow::checkCompliance] EXIT', { flow_complete: true });
       return {
         message:
           "I was unable to retrieve your compliance status at this time.\n\n" +
@@ -272,6 +316,8 @@ class TaxClearanceFlow {
     const status = compliance.data;
 
     if (status.is_compliant) {
+      console.log('[taxClearance.flow::checkCompliance] branch: compliant');
+      console.log('[taxClearance.flow::checkCompliance] EXIT', { next_step: 1, awaiting_input: 'tcc_delivery' });
       return {
         message:
           `Great news! Your tax account (TIN: ${tin.slice(0, 3)}****${tin.slice(-2)}) is *fully compliant*.\n\n` +
@@ -286,6 +332,7 @@ class TaxClearanceFlow {
       };
     }
 
+    console.log('[taxClearance.flow::checkCompliance] branch: non-compliant - building gap summary');
     // Non-compliant: build gap summary
     const overdueFilings = status.filings.filter((f) => f.status === "overdue");
     const outstandingAssessments = status.outstanding_assessments.filter(
@@ -298,6 +345,7 @@ class TaxClearanceFlow {
     const gaps: string[] = [];
 
     if (overdueFilings.length > 0) {
+      console.log('[taxClearance.flow::checkCompliance] branch: has overdue filings', { count: overdueFilings.length });
       gaps.push(
         `*Overdue Filings (${overdueFilings.length}):*\n` +
           overdueFilings
@@ -307,6 +355,7 @@ class TaxClearanceFlow {
     }
 
     if (outstandingAssessments.length > 0) {
+      console.log('[taxClearance.flow::checkCompliance] branch: has outstanding assessments', { count: outstandingAssessments.length });
       const totalOwed = outstandingAssessments.reduce((s, a) => s + a.balance, 0);
       gaps.push(
         `*Outstanding Assessments:*\n` +
@@ -321,6 +370,7 @@ class TaxClearanceFlow {
     }
 
     if (outstandingPenalties.length > 0) {
+      console.log('[taxClearance.flow::checkCompliance] branch: has outstanding penalties', { count: outstandingPenalties.length });
       const totalPenalties = outstandingPenalties.reduce((s, p) => s + p.amount, 0);
       gaps.push(
         `*Penalties & Interest:*\n` +
@@ -340,6 +390,7 @@ class TaxClearanceFlow {
       outstanding_penalties: outstandingPenalties,
     };
 
+    console.log('[taxClearance.flow::checkCompliance] EXIT', { next_step: 1, awaiting_input: 'resolution_choice' });
     return {
       message:
         `Your tax account (TIN: ${tin.slice(0, 3)}****${tin.slice(-2)}) has *compliance gaps* that must be resolved before a TCC can be issued.\n\n` +
@@ -357,20 +408,33 @@ class TaxClearanceFlow {
     assessmentCount: number,
     penaltyCount: number,
   ): Array<{ id: string; title: string }> {
+    console.log('[taxClearance.flow::getResolutionButtons] ENTER', { overdueCount, assessmentCount, penaltyCount });
     const buttons: Array<{ id: string; title: string }> = [];
-    if (assessmentCount > 0) buttons.push({ id: "pay_now", title: "Pay Outstanding" });
-    if (overdueCount > 0) buttons.push({ id: "file_returns", title: "File Pending Returns" });
-    if (penaltyCount > 0) buttons.push({ id: "waiver", title: "Request Penalty Waiver" });
+    if (assessmentCount > 0) {
+      console.log('[taxClearance.flow::getResolutionButtons] branch: add pay_now');
+      buttons.push({ id: "pay_now", title: "Pay Outstanding" });
+    }
+    if (overdueCount > 0) {
+      console.log('[taxClearance.flow::getResolutionButtons] branch: add file_returns');
+      buttons.push({ id: "file_returns", title: "File Pending Returns" });
+    }
+    if (penaltyCount > 0) {
+      console.log('[taxClearance.flow::getResolutionButtons] branch: add waiver');
+      buttons.push({ id: "waiver", title: "Request Penalty Waiver" });
+    }
     buttons.push({ id: "escalate", title: "Speak to an Officer" });
+    console.log('[taxClearance.flow::getResolutionButtons] EXIT', { buttonCount: buttons.length });
     return buttons;
   }
 
   /** Re-display resolution menu */
   private buildResolutionMenu(data: Record<string, unknown>): FlowStepResult {
+    console.log('[taxClearance.flow::buildResolutionMenu] ENTER');
     const overdue = (data.overdue_filings as unknown[])?.length ?? 0;
     const assessments = (data.outstanding_liabilities as unknown[])?.length ?? 0;
     const penalties = (data.outstanding_penalties as unknown[])?.length ?? 0;
 
+    console.log('[taxClearance.flow::buildResolutionMenu] EXIT', { next_step: 1, awaiting_input: 'resolution_choice' });
     return {
       message: "Please choose one of the resolution options below:",
       buttons: this.getResolutionButtons(overdue, assessments, penalties),

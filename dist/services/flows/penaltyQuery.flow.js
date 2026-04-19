@@ -13,14 +13,19 @@ import itsmService from "../integrations/itsm.service.js";
  */
 class PenaltyQueryFlow {
     async start(phone, entities) {
+        console.log('[penaltyQuery.flow::start] ENTER', { phone, entityKeys: entities ? Object.keys(entities) : [] });
         // If NLU already provided a TIN, skip to penalty lookup
         if (entities?.tin && /^\d{10}$/.test(entities.tin)) {
+            console.log('[penaltyQuery.flow::start] branch: entities.tin provided - skip to lookup');
+            console.log('[penaltyQuery.flow::start] EXIT', { next_step: 1, awaiting_input: 'lookup_in_progress' });
             return {
                 message: `I'll look up penalties for TIN *${entities.tin.slice(0, 3)}****${entities.tin.slice(-2)}*. One moment...`,
                 next_step: 1,
                 awaiting_input: "lookup_in_progress",
             };
         }
+        console.log('[penaltyQuery.flow::start] branch: default - ask for TIN');
+        console.log('[penaltyQuery.flow::start] EXIT', { next_step: 0, awaiting_input: 'tin' });
         return {
             message: "I can help you review penalties on your tax account.\n\n" +
                 "Please provide your *TIN (Taxpayer Identification Number)* to get started:\n\n" +
@@ -30,13 +35,17 @@ class PenaltyQueryFlow {
         };
     }
     async handleInput(phone, input, step, data) {
+        console.log('[penaltyQuery.flow::handleInput] ENTER', { phone, step, inputLen: input.length });
         switch (step) {
             // ------------------------------------------------------------------
             // Step 0: Collect TIN
             // ------------------------------------------------------------------
             case 0: {
+                console.log('[penaltyQuery.flow::handleInput] branch: case 0 - collect TIN');
                 const tin = input.trim().replace(/[\s-]/g, "");
                 if (!/^\d{10}$/.test(tin)) {
+                    console.log('[penaltyQuery.flow::handleInput] branch: invalid TIN');
+                    console.log('[penaltyQuery.flow::handleInput] EXIT', { next_step: 0, awaiting_input: 'tin' });
                     return {
                         message: "A TIN must be exactly *10 digits*. Please re-enter your TIN:\n\n" +
                             "_You can find your TIN on previous tax documents or receipts._",
@@ -45,15 +54,20 @@ class PenaltyQueryFlow {
                     };
                 }
                 data.tin = tin;
+                console.log('[penaltyQuery.flow::handleInput] branch: valid TIN - fetching penalties');
+                console.log('[penaltyQuery.flow::handleInput] EXIT', { dispatched: 'fetchPenalties' });
                 return this.fetchPenalties(phone, tin, data);
             }
             // ------------------------------------------------------------------
             // Step 1: Show penalty details and allow selection
             // ------------------------------------------------------------------
             case 1: {
+                console.log('[penaltyQuery.flow::handleInput] branch: case 1 - penalty selection');
                 const trimmed = input.trim().toLowerCase();
                 const penalties = data.penalties;
                 if (trimmed === "done" || trimmed === "i'm done" || trimmed === "exit") {
+                    console.log('[penaltyQuery.flow::handleInput] branch: done');
+                    console.log('[penaltyQuery.flow::handleInput] EXIT', { flow_complete: true });
                     return {
                         message: "Thank you! If you need to review penalties again, just say *penalty query*.\n\n" +
                             "Type *menu* to see other services.",
@@ -61,7 +75,9 @@ class PenaltyQueryFlow {
                     };
                 }
                 if (trimmed === "pay_all" || trimmed === "pay all penalties") {
+                    console.log('[penaltyQuery.flow::handleInput] branch: pay_all');
                     const total = penalties.reduce((s, p) => s + p.amount, 0);
+                    console.log('[penaltyQuery.flow::handleInput] EXIT', { flow_complete: true, total });
                     return {
                         message: `To pay all penalties totalling *NGN ${total.toLocaleString()}*:\n\n` +
                             "1. Visit *remita.net* or your bank\n" +
@@ -73,9 +89,11 @@ class PenaltyQueryFlow {
                     };
                 }
                 if (trimmed === "waiver_all" || trimmed === "request waiver for all") {
+                    console.log('[penaltyQuery.flow::handleInput] branch: waiver_all');
                     data.waiver_scope = "all";
                     data.selected_penalty = null;
                     const total = penalties.reduce((s, p) => s + p.amount, 0);
+                    console.log('[penaltyQuery.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'waiver_ground', total });
                     return {
                         message: `You'd like to request a waiver for *all penalties* totalling *NGN ${total.toLocaleString()}*.\n\n` +
                             "Please select the primary reason for your waiver request:",
@@ -113,10 +131,14 @@ class PenaltyQueryFlow {
                 // Selection by number to view specific penalty details
                 const idx = parseInt(trimmed, 10) - 1;
                 if (!isNaN(idx) && idx >= 0 && idx < penalties.length) {
+                    console.log('[penaltyQuery.flow::handleInput] branch: numeric selection', { idx });
                     const penalty = penalties[idx];
                     data.selected_penalty = penalty;
+                    console.log('[penaltyQuery.flow::handleInput] EXIT', { dispatched: 'showPenaltyBreakdown' });
                     return this.showPenaltyBreakdown(penalty);
                 }
+                console.log('[penaltyQuery.flow::handleInput] branch: case 1 default - re-prompt');
+                console.log('[penaltyQuery.flow::handleInput] EXIT', { next_step: 1, awaiting_input: 'penalty_selection' });
                 return {
                     message: `Please reply with a number between *1* and *${penalties.length}* to see details, ` +
                         "or select an action below:",
@@ -133,10 +155,13 @@ class PenaltyQueryFlow {
             // Step 2: Offer waiver request option / collect waiver ground
             // ------------------------------------------------------------------
             case 2: {
+                console.log('[penaltyQuery.flow::handleInput] branch: case 2 - waiver option');
                 const trimmed = input.trim().toLowerCase();
                 // Handle penalty detail view actions
                 if (trimmed === "pay" || trimmed === "pay this penalty") {
+                    console.log('[penaltyQuery.flow::handleInput] branch: pay single penalty');
                     const penalty = data.selected_penalty;
+                    console.log('[penaltyQuery.flow::handleInput] EXIT', { flow_complete: true });
                     return {
                         message: `To pay this penalty of *NGN ${penalty.amount.toLocaleString()}*:\n\n` +
                             "1. Visit *remita.net* or your bank\n" +
@@ -147,10 +172,14 @@ class PenaltyQueryFlow {
                     };
                 }
                 if (trimmed === "back" || trimmed === "view all penalties") {
+                    console.log('[penaltyQuery.flow::handleInput] branch: back to penalties list');
                     const tin = data.tin;
+                    console.log('[penaltyQuery.flow::handleInput] EXIT', { dispatched: 'fetchPenalties' });
                     return this.fetchPenalties(phone, tin, data);
                 }
                 if (trimmed === "done" || trimmed === "i'm done") {
+                    console.log('[penaltyQuery.flow::handleInput] branch: done');
+                    console.log('[penaltyQuery.flow::handleInput] EXIT', { flow_complete: true });
                     return {
                         message: "Thank you! Type *menu* to see other services.",
                         flow_complete: true,
@@ -158,7 +187,9 @@ class PenaltyQueryFlow {
                 }
                 // Handle waiver request (single penalty from breakdown view)
                 if (trimmed === "waiver" || trimmed === "request waiver") {
+                    console.log('[penaltyQuery.flow::handleInput] branch: waiver single');
                     data.waiver_scope = "single";
+                    console.log('[penaltyQuery.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'waiver_ground' });
                     return {
                         message: "Please select the primary reason for your waiver request:",
                         menu_options: [
@@ -181,6 +212,7 @@ class PenaltyQueryFlow {
                     "other",
                 ];
                 if (validGrounds.includes(trimmed)) {
+                    console.log('[penaltyQuery.flow::handleInput] branch: valid waiver ground', { ground: trimmed });
                     data.waiver_ground = trimmed;
                     const groundLabels = {
                         financial_hardship: "Financial Hardship",
@@ -189,6 +221,7 @@ class PenaltyQueryFlow {
                         reasonable_cause: "Reasonable Cause",
                         other: "Other",
                     };
+                    console.log('[penaltyQuery.flow::handleInput] EXIT', { next_step: 3, awaiting_input: 'waiver_explanation' });
                     return {
                         message: `*Waiver Ground:* ${groundLabels[trimmed]}\n\n` +
                             "Please provide a brief explanation to support your waiver request:\n\n" +
@@ -200,10 +233,14 @@ class PenaltyQueryFlow {
                 }
                 // If free text was typed instead of a menu selection, treat as 'other' ground
                 if (trimmed.length > 15) {
+                    console.log('[penaltyQuery.flow::handleInput] branch: free-text as other ground');
                     data.waiver_ground = "other";
                     data.waiver_explanation = input.trim();
+                    console.log('[penaltyQuery.flow::handleInput] EXIT', { dispatched: 'submitWaiverTicket' });
                     return this.submitWaiverTicket(phone, data);
                 }
+                console.log('[penaltyQuery.flow::handleInput] branch: case 2 default re-prompt');
+                console.log('[penaltyQuery.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'penalty_action' });
                 return {
                     message: "What would you like to do?",
                     buttons: [
@@ -220,8 +257,11 @@ class PenaltyQueryFlow {
             // Step 3: Create PEN-WAIVER ITSM ticket
             // ------------------------------------------------------------------
             case 3: {
+                console.log('[penaltyQuery.flow::handleInput] branch: case 3 - waiver explanation');
                 const explanation = input.trim();
                 if (explanation.length < 10) {
+                    console.log('[penaltyQuery.flow::handleInput] branch: explanation too short');
+                    console.log('[penaltyQuery.flow::handleInput] EXIT', { next_step: 3, awaiting_input: 'waiver_explanation' });
                     return {
                         message: "Please provide a more detailed explanation (at least a few sentences) to support your waiver request:",
                         next_step: 3,
@@ -229,9 +269,13 @@ class PenaltyQueryFlow {
                     };
                 }
                 data.waiver_explanation = explanation;
+                console.log('[penaltyQuery.flow::handleInput] branch: submitting waiver ticket');
+                console.log('[penaltyQuery.flow::handleInput] EXIT', { dispatched: 'submitWaiverTicket' });
                 return this.submitWaiverTicket(phone, data);
             }
             default:
+                console.log('[penaltyQuery.flow::handleInput] branch: default case - unknown step');
+                console.log('[penaltyQuery.flow::handleInput] EXIT', { next_step: 0, awaiting_input: 'tin' });
                 return {
                     message: "Something went wrong. Let's start the penalty query again.",
                     next_step: 0,
@@ -241,8 +285,11 @@ class PenaltyQueryFlow {
     }
     /** Fetch penalties from TaxProMax compliance endpoint and display them */
     async fetchPenalties(phone, tin, data) {
+        console.log('[penaltyQuery.flow::fetchPenalties] ENTER', { phone, tinPreview: tin.slice(0, 3) + '***' });
         const compliance = await taxProMaxService.getComplianceStatus(tin);
         if (!compliance.success || !compliance.data) {
+            console.log('[penaltyQuery.flow::fetchPenalties] branch: compliance lookup failed');
+            console.log('[penaltyQuery.flow::fetchPenalties] EXIT', { flow_complete: true });
             return {
                 message: "I was unable to retrieve your penalty information at this time.\n\n" +
                     "This may be due to a temporary system issue. Please try again later " +
@@ -253,6 +300,8 @@ class PenaltyQueryFlow {
         }
         const penalties = compliance.data.penalties;
         if (!penalties || penalties.length === 0) {
+            console.log('[penaltyQuery.flow::fetchPenalties] branch: no penalties');
+            console.log('[penaltyQuery.flow::fetchPenalties] EXIT', { flow_complete: true });
             return {
                 message: `Great news! There are *no penalties* currently on your tax account (TIN: ${tin.slice(0, 3)}****${tin.slice(-2)}).\n\n` +
                     "Keep up with your filing and payment deadlines to stay penalty-free!\n\n" +
@@ -263,6 +312,7 @@ class PenaltyQueryFlow {
         data.penalties = penalties;
         const totalPenalties = penalties.reduce((sum, p) => sum + p.amount, 0);
         const outstandingCount = penalties.filter((p) => p.status === "outstanding").length;
+        console.log('[penaltyQuery.flow::fetchPenalties] branch: penalties found', { count: penalties.length, totalPenalties, outstandingCount });
         const listing = penalties.map((p, i) => {
             const typeLabel = p.type.replace(/_/g, " ").toUpperCase();
             return (`${i + 1}. *${typeLabel}*\n` +
@@ -271,6 +321,7 @@ class PenaltyQueryFlow {
                 `   Statutory Basis: ${p.statutory_basis ?? "N/A"}\n` +
                 `   Status: ${p.status.toUpperCase()}`);
         }).join("\n\n");
+        console.log('[penaltyQuery.flow::fetchPenalties] EXIT', { next_step: 1, awaiting_input: 'penalty_selection' });
         return {
             message: `*Penalties on Your Account (TIN: ${tin.slice(0, 3)}****${tin.slice(-2)})*\n\n` +
                 listing +
@@ -288,8 +339,10 @@ class PenaltyQueryFlow {
     }
     /** Show a detailed breakdown of a single penalty */
     showPenaltyBreakdown(penalty) {
+        console.log('[penaltyQuery.flow::showPenaltyBreakdown] ENTER', { penalty_id: penalty.penalty_id, type: penalty.type });
         const typeLabel = penalty.type.replace(/_/g, " ").toUpperCase();
         const explanation = this.getStatutoryExplanation(penalty.statutory_basis);
+        console.log('[penaltyQuery.flow::showPenaltyBreakdown] EXIT', { next_step: 2, awaiting_input: 'penalty_action' });
         return {
             message: `*Penalty Breakdown*\n\n` +
                 `ID: ${penalty.penalty_id}\n` +
@@ -313,18 +366,25 @@ class PenaltyQueryFlow {
     }
     /** Provide a brief explanation of the statutory basis */
     getStatutoryExplanation(basis) {
-        if (!basis)
+        console.log('[penaltyQuery.flow::getStatutoryExplanation] ENTER', { basis });
+        if (!basis) {
+            console.log('[penaltyQuery.flow::getStatutoryExplanation] branch: no basis');
+            console.log('[penaltyQuery.flow::getStatutoryExplanation] EXIT', { result: 'empty' });
             return "";
+        }
         const explanations = {
             "Section 81(2) PITA": "_Section 81(2) of the Personal Income Tax Act imposes penalties for late filing of returns._\n",
             "Section 55 CITA": "_Section 55 of the Companies Income Tax Act prescribes penalties for failure to file returns._\n",
             "Section 40 VAT Act": "_Section 40 of the VAT Act provides for penalties on late remittance of VAT._\n",
             "Section 32(1) PITA": "_Section 32(1) of PITA prescribes penalties for late payment of assessed tax._\n",
         };
-        return explanations[basis] ?? `_Statutory reference: ${basis}_\n`;
+        const result = explanations[basis] ?? `_Statutory reference: ${basis}_\n`;
+        console.log('[penaltyQuery.flow::getStatutoryExplanation] EXIT', { hasMatch: !!explanations[basis] });
+        return result;
     }
     /** Submit the penalty waiver request as a PEN-WAIVER ITSM ticket */
     async submitWaiverTicket(phone, data) {
+        console.log('[penaltyQuery.flow::submitWaiverTicket] ENTER', { phone, scope: data.waiver_scope });
         const waiverScope = data.waiver_scope;
         const tin = data.tin ?? "N/A";
         const penalty = data.selected_penalty;
@@ -342,6 +402,7 @@ class PenaltyQueryFlow {
         const penaltyDescription = waiverScope === "all"
             ? `All penalties on account (${penalties.length} total)`
             : `Single penalty: ${penalty?.penalty_id ?? "N/A"}`;
+        console.log('[penaltyQuery.flow::submitWaiverTicket] branch: creating PEN-WAIVER ticket', { totalAmount, scope: waiverScope });
         const ticketResult = await itsmService.createTicket({
             type: "PEN-WAIVER",
             subject: `Penalty Waiver Request - TIN ${tin} - NGN ${totalAmount.toLocaleString()}`,
@@ -356,6 +417,8 @@ class PenaltyQueryFlow {
             priority: "medium",
         });
         if (!ticketResult.success) {
+            console.log('[penaltyQuery.flow::submitWaiverTicket] branch: ticket creation failed');
+            console.log('[penaltyQuery.flow::submitWaiverTicket] EXIT', { flow_complete: true, error: 'ticket creation failed' });
             return {
                 message: "I'm sorry, there was an issue submitting your waiver request.\n\n" +
                     "Please try again later or submit a formal waiver letter to your tax office.\n\n" +
@@ -363,6 +426,8 @@ class PenaltyQueryFlow {
                 flow_complete: true,
             };
         }
+        console.log('[penaltyQuery.flow::submitWaiverTicket] branch: ticket created', { reference: ticketResult.data.reference });
+        console.log('[penaltyQuery.flow::submitWaiverTicket] EXIT', { flow_complete: true });
         return {
             message: `Your penalty waiver request has been submitted!\n\n` +
                 `*Ticket Reference:* ${ticketResult.data.reference}\n` +

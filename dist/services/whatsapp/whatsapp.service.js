@@ -5,6 +5,7 @@ import { PHONE_NUMBER_ID, WHATSAPP_TOKEN } from "../../config.js";
 class WhatsAppService {
     apiUrl = `https://graph.facebook.com/v22.0/${PHONE_NUMBER_ID}/messages`;
     async sendMessage(to, message) {
+        console.log("[whatsapp.service::sendMessage] ENTER", { to: to ? `${to.slice(0, 4)}***` : null, messageLength: message?.length });
         try {
             await axios.post(this.apiUrl, {
                 messaging_product: "whatsapp",
@@ -16,17 +17,21 @@ class WhatsAppService {
                     "Content-Type": "application/json",
                 },
             });
+            console.log("[whatsapp.service::sendMessage] EXIT", { ok: true });
         }
         catch (err) {
+            console.log("[whatsapp.service::sendMessage] branch: caught error");
             if (axios.isAxiosError(err)) {
                 console.error("Send message error:", err.response?.status, err.response?.data);
             }
             else if (err instanceof Error) {
                 console.error(err.message);
             }
+            console.log("[whatsapp.service::sendMessage] EXIT", { ok: false });
         }
     }
     async sendInteractiveListMessage(to, headerText, bodyText, footerText, sections) {
+        console.log("[whatsapp.service::sendInteractiveListMessage] ENTER", { to: to ? `${to.slice(0, 4)}***` : null, headerText, sectionsCount: sections?.length, rowsCount: sections?.reduce((n, s) => n + s.rows.length, 0) });
         try {
             await axios.post(this.apiUrl, {
                 messaging_product: "whatsapp",
@@ -48,14 +53,18 @@ class WhatsAppService {
                     "Content-Type": "application/json",
                 },
             });
+            console.log("[whatsapp.service::sendInteractiveListMessage] EXIT", { ok: true });
         }
         catch (err) {
+            console.log("[whatsapp.service::sendInteractiveListMessage] branch: caught error");
             if (axios.isAxiosError(err)) {
                 console.error("Send list error:", err.response?.status, err.response?.data);
             }
+            console.log("[whatsapp.service::sendInteractiveListMessage] EXIT", { ok: false });
         }
     }
     async sendInteractiveButtonMessage(to, bodyText, buttons) {
+        console.log("[whatsapp.service::sendInteractiveButtonMessage] ENTER", { to: to ? `${to.slice(0, 4)}***` : null, bodyLength: bodyText?.length, buttonCount: buttons?.length });
         try {
             await axios.post(this.apiUrl, {
                 messaging_product: "whatsapp",
@@ -77,14 +86,18 @@ class WhatsAppService {
                     "Content-Type": "application/json",
                 },
             });
+            console.log("[whatsapp.service::sendInteractiveButtonMessage] EXIT", { ok: true });
         }
         catch (err) {
+            console.log("[whatsapp.service::sendInteractiveButtonMessage] branch: caught error");
             if (axios.isAxiosError(err)) {
                 console.error("Send button error:", err.response?.status, err.response?.data);
             }
+            console.log("[whatsapp.service::sendInteractiveButtonMessage] EXIT", { ok: false });
         }
     }
     async sendMainMenu(to, options) {
+        console.log("[whatsapp.service::sendMainMenu] ENTER", { to: to ? `${to.slice(0, 4)}***` : null, optionsCount: options?.length });
         const rows = options.map((opt) => {
             const row = {
                 id: opt.id,
@@ -95,8 +108,10 @@ class WhatsAppService {
             return row;
         });
         await this.sendInteractiveListMessage(to, "NRS TaxChat", "What would you like to do today?", "Official NRS Virtual Tax Office", [{ title: "Tax Services", rows }]);
+        console.log("[whatsapp.service::sendMainMenu] EXIT", { rows: rows.length });
     }
     async sendFlowMessage(recipientPhone, flowToken, flowId, body, flowCta, screen) {
+        console.log("[whatsapp.service::sendFlowMessage] ENTER", { to: recipientPhone ? `${recipientPhone.slice(0, 4)}***` : null, flowId, hasFlowToken: !!flowToken, screen, flowCta });
         try {
             const url = `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`;
             const data = {
@@ -131,15 +146,19 @@ class WhatsAppService {
                     Authorization: `Bearer ${WHATSAPP_TOKEN}`,
                 },
             });
+            console.log("[whatsapp.service::sendFlowMessage] EXIT", { ok: true });
         }
         catch (err) {
+            console.log("[whatsapp.service::sendFlowMessage] branch: caught error");
             if (axios.isAxiosError(err)) {
                 console.error("Send flow error:", err.response?.status, err.response?.data);
             }
+            console.log("[whatsapp.service::sendFlowMessage] EXIT", { ok: false, rethrow: true });
             throw err;
         }
     }
     async sendInitFlowMessage(recipientPhone, flowToken, flowId, body, flowCta, _screen) {
+        console.log("[whatsapp.service::sendInitFlowMessage] ENTER", { to: recipientPhone ? `${recipientPhone.slice(0, 4)}***` : null, flowId, hasFlowToken: !!flowToken, flowCta });
         try {
             const url = `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`;
             const data = {
@@ -170,15 +189,19 @@ class WhatsAppService {
                     Authorization: `Bearer ${WHATSAPP_TOKEN}`,
                 },
             });
+            console.log("[whatsapp.service::sendInitFlowMessage] EXIT", { ok: true });
         }
         catch (err) {
+            console.log("[whatsapp.service::sendInitFlowMessage] branch: caught error");
             if (axios.isAxiosError(err)) {
                 console.error("Send init flow error:", err.response?.status, err.response?.data);
             }
+            console.log("[whatsapp.service::sendInitFlowMessage] EXIT", { ok: false, rethrow: true });
             throw err;
         }
     }
     async sendTemplateMessage(to, templateName, languageCode, components) {
+        console.log("[whatsapp.service::sendTemplateMessage] ENTER", { to: to ? `${to.slice(0, 4)}***` : null, templateName, languageCode, componentsCount: components?.length });
         try {
             const response = await axios.post(this.apiUrl, {
                 messaging_product: "whatsapp",
@@ -195,16 +218,21 @@ class WhatsAppService {
                     "Content-Type": "application/json",
                 },
             });
-            return response.data?.messages?.[0]?.id ?? null;
+            const msgId = response.data?.messages?.[0]?.id ?? null;
+            console.log("[whatsapp.service::sendTemplateMessage] EXIT", { ok: true, hasMessageId: !!msgId });
+            return msgId;
         }
         catch (err) {
+            console.log("[whatsapp.service::sendTemplateMessage] branch: caught error");
             if (axios.isAxiosError(err)) {
                 console.error("Send template error:", err.response?.status, err.response?.data);
             }
+            console.log("[whatsapp.service::sendTemplateMessage] EXIT", { ok: false });
             return null;
         }
     }
     async sendImage(to, mediaId, caption) {
+        console.log("[whatsapp.service::sendImage] ENTER", { to: to ? `${to.slice(0, 4)}***` : null, hasMediaId: !!mediaId, hasCaption: !!caption });
         try {
             await axios.post(this.apiUrl, {
                 messaging_product: "whatsapp",
@@ -217,15 +245,19 @@ class WhatsAppService {
                     "Content-Type": "application/json",
                 },
             });
+            console.log("[whatsapp.service::sendImage] EXIT", { ok: true });
         }
         catch (err) {
+            console.log("[whatsapp.service::sendImage] branch: caught error");
             if (axios.isAxiosError(err)) {
                 console.error("Send image error:", err.response?.status, err.response?.data);
             }
+            console.log("[whatsapp.service::sendImage] EXIT", { ok: false, rethrow: true });
             throw err;
         }
     }
     async uploadMedia(filePath, fileType = "application/pdf") {
+        console.log("[whatsapp.service::uploadMedia] ENTER", { filePath, fileType });
         const url = `https://graph.facebook.com/v22.0/${PHONE_NUMBER_ID}/media`;
         const form = new FormData();
         const fileBuffer = fs.readFileSync(filePath);
@@ -233,20 +265,25 @@ class WhatsAppService {
         form.append("file", blob, path.basename(filePath));
         form.append("messaging_product", "whatsapp");
         form.append("type", fileType);
+        console.log("[whatsapp.service::uploadMedia] uploading", { sizeBytes: fileBuffer.length });
         try {
             const response = await axios.post(url, form, {
                 headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` },
             });
+            console.log("[whatsapp.service::uploadMedia] EXIT", { ok: true, hasId: !!response.data?.id });
             return response.data.id;
         }
         catch (err) {
+            console.log("[whatsapp.service::uploadMedia] branch: caught error");
             if (axios.isAxiosError(err)) {
                 console.error("Media upload error:", err.response?.status, err.response?.data);
             }
+            console.log("[whatsapp.service::uploadMedia] EXIT", { ok: false, rethrow: true });
             throw err;
         }
     }
     async sendDocument(to, mediaId, fileName, caption) {
+        console.log("[whatsapp.service::sendDocument] ENTER", { to: to ? `${to.slice(0, 4)}***` : null, fileName, hasMediaId: !!mediaId, hasCaption: !!caption });
         try {
             await axios.post(this.apiUrl, {
                 messaging_product: "whatsapp",
@@ -259,15 +296,19 @@ class WhatsAppService {
                     "Content-Type": "application/json",
                 },
             });
+            console.log("[whatsapp.service::sendDocument] EXIT", { ok: true });
         }
         catch (err) {
+            console.log("[whatsapp.service::sendDocument] branch: caught error");
             if (axios.isAxiosError(err)) {
                 console.error("Send document error:", err.response?.status, err.response?.data);
             }
+            console.log("[whatsapp.service::sendDocument] EXIT", { ok: false, rethrow: true });
             throw err;
         }
     }
     async markAsRead(messageId) {
+        console.log("[whatsapp.service::markAsRead] ENTER", { hasMessageId: !!messageId });
         try {
             await axios.post(this.apiUrl, {
                 messaging_product: "whatsapp",
@@ -279,9 +320,12 @@ class WhatsAppService {
                     "Content-Type": "application/json",
                 },
             });
+            console.log("[whatsapp.service::markAsRead] EXIT", { ok: true });
         }
         catch (err) {
+            console.log("[whatsapp.service::markAsRead] branch: caught error (best-effort)");
             // Read receipts are best-effort
+            console.log("[whatsapp.service::markAsRead] EXIT", { ok: false });
         }
     }
 }

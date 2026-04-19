@@ -14,8 +14,11 @@ import itsmService from "../integrations/itsm.service.js";
  */
 class WHTCreditNoteFlow {
     async start(phone, entities) {
+        console.log('[whtCreditNote.flow::start] ENTER', { phone, entityKeys: entities ? Object.keys(entities) : [] });
         // If NLU already extracted a reference, jump to lookup
         if (entities?.reference) {
+            console.log('[whtCreditNote.flow::start] branch: entities.reference provided');
+            console.log('[whtCreditNote.flow::start] EXIT', { next_step: 1, awaiting_input: 'lookup_in_progress' });
             return {
                 message: `I'll look up WHT payment reference *${entities.reference}*. One moment...`,
                 next_step: 1,
@@ -25,6 +28,8 @@ class WHTCreditNoteFlow {
         }
         // If NLU extracted a TIN (likely the WHT agent's TIN)
         if (entities?.tin && /^\d{10}$/.test(entities.tin)) {
+            console.log('[whtCreditNote.flow::start] branch: entities.tin provided (10-digit)');
+            console.log('[whtCreditNote.flow::start] EXIT', { next_step: 1, awaiting_input: 'lookup_in_progress' });
             return {
                 message: `I'll look up WHT deductions by agent TIN *${entities.tin.slice(0, 3)}****${entities.tin.slice(-2)}*. One moment...`,
                 next_step: 1,
@@ -32,6 +37,8 @@ class WHTCreditNoteFlow {
                 requires_auth_tier: 2,
             };
         }
+        console.log('[whtCreditNote.flow::start] branch: default - ask lookup method');
+        console.log('[whtCreditNote.flow::start] EXIT', { next_step: 0, awaiting_input: 'lookup_method' });
         return {
             message: "I can help you request a Withholding Tax (WHT) credit note.\n\n" +
                 "A credit note confirms that WHT was deducted from a payment made to you " +
@@ -47,14 +54,18 @@ class WHTCreditNoteFlow {
         };
     }
     async handleInput(phone, input, step, data) {
+        console.log('[whtCreditNote.flow::handleInput] ENTER', { phone, step, inputLen: input.length });
         switch (step) {
             // ------------------------------------------------------------------
             // Step 0: Collect WHT agent TIN or payment reference
             // ------------------------------------------------------------------
             case 0: {
+                console.log('[whtCreditNote.flow::handleInput] branch: case 0 - lookup method');
                 const trimmed = input.trim().toLowerCase();
                 if (trimmed === "by_agent_tin" || trimmed === "wht agent tin") {
+                    console.log('[whtCreditNote.flow::handleInput] branch: by_agent_tin');
                     data.lookup_method = "agent_tin";
+                    console.log('[whtCreditNote.flow::handleInput] EXIT', { next_step: 1, awaiting_input: 'agent_tin' });
                     return {
                         message: "Please provide the *TIN of the WHT deducting party* (agent):\n\n" +
                             "_This is the 10-digit TIN of the company or government agency that deducted WHT from your payment._",
@@ -63,7 +74,9 @@ class WHTCreditNoteFlow {
                     };
                 }
                 if (trimmed === "by_reference" || trimmed === "payment reference") {
+                    console.log('[whtCreditNote.flow::handleInput] branch: by_reference');
                     data.lookup_method = "reference";
+                    console.log('[whtCreditNote.flow::handleInput] EXIT', { next_step: 1, awaiting_input: 'payment_reference' });
                     return {
                         message: "Please provide the *payment or invoice reference* related to the WHT deduction:\n\n" +
                             "_This could be the invoice number, contract reference, or e-invoice reference from Taxly._",
@@ -73,9 +86,13 @@ class WHTCreditNoteFlow {
                 }
                 // Handle retry and raise_ticket from not-found result
                 if (trimmed === "retry" || trimmed === "try again") {
+                    console.log('[whtCreditNote.flow::handleInput] branch: retry');
+                    console.log('[whtCreditNote.flow::handleInput] EXIT', { dispatched: 'start' });
                     return this.start(phone);
                 }
                 if (trimmed === "raise_ticket" || trimmed === "raise support ticket" || trimmed === "follow up on remittance") {
+                    console.log('[whtCreditNote.flow::handleInput] branch: raise_ticket');
+                    console.log('[whtCreditNote.flow::handleInput] EXIT', { next_step: 4, awaiting_input: 'support_description' });
                     return {
                         message: "Please briefly describe your WHT issue so I can create a support ticket:\n\n" +
                             "_Example: \"WHT of NGN 250,000 deducted by ABC Company (TIN 1234567890) in January 2025 has not been remitted\"_",
@@ -84,6 +101,8 @@ class WHTCreditNoteFlow {
                     };
                 }
                 if (trimmed === "done" || trimmed === "i'm done") {
+                    console.log('[whtCreditNote.flow::handleInput] branch: done');
+                    console.log('[whtCreditNote.flow::handleInput] EXIT', { flow_complete: true });
                     return {
                         message: "Thank you! If you need help with WHT credit notes in the future, just say *WHT credit note*.\n\n" +
                             "Type *menu* to see other services.",
@@ -93,16 +112,22 @@ class WHTCreditNoteFlow {
                 // User typed a TIN directly
                 const cleanInput = input.trim().replace(/[\s-]/g, "");
                 if (/^\d{10}$/.test(cleanInput)) {
+                    console.log('[whtCreditNote.flow::handleInput] branch: direct TIN typed');
                     data.lookup_method = "agent_tin";
                     data.agent_tin = cleanInput;
+                    console.log('[whtCreditNote.flow::handleInput] EXIT', { dispatched: 'lookupWHTDeduction' });
                     return this.lookupWHTDeduction(phone, data);
                 }
                 // User typed a reference directly
                 if (cleanInput.length >= 5) {
+                    console.log('[whtCreditNote.flow::handleInput] branch: direct reference typed');
                     data.lookup_method = "reference";
                     data.payment_reference = input.trim();
+                    console.log('[whtCreditNote.flow::handleInput] EXIT', { dispatched: 'lookupWHTDeduction' });
                     return this.lookupWHTDeduction(phone, data);
                 }
+                console.log('[whtCreditNote.flow::handleInput] branch: case 0 default re-prompt');
+                console.log('[whtCreditNote.flow::handleInput] EXIT', { next_step: 0, awaiting_input: 'lookup_method' });
                 return {
                     message: "I didn't understand that. Please select how you'd like to look up the WHT deduction:",
                     buttons: [
@@ -117,12 +142,16 @@ class WHTCreditNoteFlow {
             // Step 1: Validate and fetch WHT details from Taxly
             // ------------------------------------------------------------------
             case 1: {
+                console.log('[whtCreditNote.flow::handleInput] branch: case 1 - WHT lookup');
                 const trimmed = input.trim();
                 const lookupMethod = data.lookup_method;
                 // Validate input based on lookup method
                 if (lookupMethod === "agent_tin" && !data.agent_tin) {
+                    console.log('[whtCreditNote.flow::handleInput] branch: agent_tin input');
                     const tin = trimmed.replace(/[\s-]/g, "");
                     if (!/^\d{10}$/.test(tin)) {
+                        console.log('[whtCreditNote.flow::handleInput] branch: invalid agent TIN');
+                        console.log('[whtCreditNote.flow::handleInput] EXIT', { next_step: 1, awaiting_input: 'agent_tin' });
                         return {
                             message: "A TIN must be exactly *10 digits*. Please re-enter the WHT agent's TIN:",
                             next_step: 1,
@@ -132,7 +161,10 @@ class WHTCreditNoteFlow {
                     data.agent_tin = tin;
                 }
                 else if (lookupMethod === "reference" && !data.payment_reference) {
+                    console.log('[whtCreditNote.flow::handleInput] branch: payment_reference input');
                     if (trimmed.length < 5) {
+                        console.log('[whtCreditNote.flow::handleInput] branch: reference too short');
+                        console.log('[whtCreditNote.flow::handleInput] EXIT', { next_step: 1, awaiting_input: 'payment_reference' });
                         return {
                             message: "That reference seems too short. Please enter a valid payment or invoice reference:",
                             next_step: 1,
@@ -141,15 +173,19 @@ class WHTCreditNoteFlow {
                     }
                     data.payment_reference = trimmed;
                 }
+                console.log('[whtCreditNote.flow::handleInput] EXIT', { dispatched: 'lookupWHTDeduction' });
                 return this.lookupWHTDeduction(phone, data);
             }
             // ------------------------------------------------------------------
             // Step 2: Collect credit note details (period, amount)
             // ------------------------------------------------------------------
             case 2: {
+                console.log('[whtCreditNote.flow::handleInput] branch: case 2 - credit note details');
                 const trimmed = input.trim();
                 // Handle action buttons from WHT detail display
                 if (trimmed.toLowerCase() === "proceed" || trimmed.toLowerCase() === "request credit note") {
+                    console.log('[whtCreditNote.flow::handleInput] branch: proceed to credit note request');
+                    console.log('[whtCreditNote.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'credit_details' });
                     return {
                         message: "Please provide the following details for the credit note request.\n\n" +
                             "Reply with each on a separate line:\n\n" +
@@ -163,6 +199,8 @@ class WHTCreditNoteFlow {
                     };
                 }
                 if (trimmed.toLowerCase() === "done" || trimmed.toLowerCase() === "i'm done") {
+                    console.log('[whtCreditNote.flow::handleInput] branch: done');
+                    console.log('[whtCreditNote.flow::handleInput] EXIT', { flow_complete: true });
                     return {
                         message: "Thank you! If you need a WHT credit note in the future, just say *WHT credit note*.\n\n" +
                             "Type *menu* to see other services.",
@@ -170,14 +208,19 @@ class WHTCreditNoteFlow {
                     };
                 }
                 // Parse credit note details
+                console.log('[whtCreditNote.flow::handleInput] branch: parse credit details');
+                console.log('[whtCreditNote.flow::handleInput] EXIT', { dispatched: 'parseCreditDetails' });
                 return this.parseCreditDetails(trimmed, data);
             }
             // ------------------------------------------------------------------
             // Step 3: Review and confirm submission
             // ------------------------------------------------------------------
             case 3: {
+                console.log('[whtCreditNote.flow::handleInput] branch: case 3 - review/confirm');
                 const choice = input.trim().toLowerCase();
                 if (choice === "cancel" || choice === "no") {
+                    console.log('[whtCreditNote.flow::handleInput] branch: cancel');
+                    console.log('[whtCreditNote.flow::handleInput] EXIT', { flow_complete: true });
                     return {
                         message: "The credit note request has been cancelled.\n\n" +
                             "If you need help with WHT credit notes in the future, just say *WHT credit note*.\n\n" +
@@ -186,8 +229,10 @@ class WHTCreditNoteFlow {
                     };
                 }
                 if (choice === "edit" || choice === "edit details") {
+                    console.log('[whtCreditNote.flow::handleInput] branch: edit');
                     data.credit_period = undefined;
                     data.taxpayer_tin = undefined;
+                    console.log('[whtCreditNote.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'credit_details' });
                     return {
                         message: "Let's update the details. Please provide:\n\n" +
                             "1. *Tax period* to credit (e.g., 2025-Q1)\n" +
@@ -198,8 +243,12 @@ class WHTCreditNoteFlow {
                     };
                 }
                 if (choice === "confirm" || choice === "submit" || choice === "confirm & submit" || choice === "yes") {
+                    console.log('[whtCreditNote.flow::handleInput] branch: confirm/submit');
+                    console.log('[whtCreditNote.flow::handleInput] EXIT', { dispatched: 'submitCreditNoteRequest' });
                     return this.submitCreditNoteRequest(phone, data);
                 }
+                console.log('[whtCreditNote.flow::handleInput] branch: case 3 default re-prompt');
+                console.log('[whtCreditNote.flow::handleInput] EXIT', { next_step: 3, awaiting_input: 'confirmation' });
                 return {
                     message: "Please confirm your credit note request:",
                     buttons: [
@@ -215,12 +264,17 @@ class WHTCreditNoteFlow {
             // Step 4: Create WHT-CN ITSM ticket (post-submission or support)
             // ------------------------------------------------------------------
             case 4: {
+                console.log('[whtCreditNote.flow::handleInput] branch: case 4 - ticket creation / post-submit');
                 const trimmed = input.trim();
                 const choice = trimmed.toLowerCase();
                 if (choice === "another" || choice === "request another") {
+                    console.log('[whtCreditNote.flow::handleInput] branch: request another');
+                    console.log('[whtCreditNote.flow::handleInput] EXIT', { dispatched: 'start' });
                     return this.start(phone);
                 }
                 if (choice === "done" || choice === "i'm done") {
+                    console.log('[whtCreditNote.flow::handleInput] branch: done');
+                    console.log('[whtCreditNote.flow::handleInput] EXIT', { flow_complete: true });
                     return {
                         message: "Thank you! If you need another credit note, just say *WHT credit note*.\n\n" +
                             "Type *menu* to see other services.",
@@ -229,6 +283,7 @@ class WHTCreditNoteFlow {
                 }
                 // Handle support ticket creation for unremitted WHT or general issues
                 if (trimmed.length >= 10) {
+                    console.log('[whtCreditNote.flow::handleInput] branch: creating WHT-CN support ticket');
                     const ticketResult = await itsmService.createTicket({
                         type: "WHT-CN",
                         subject: `WHT Credit Note Support - Phone ${phone}`,
@@ -240,12 +295,16 @@ class WHTCreditNoteFlow {
                         priority: "medium",
                     });
                     if (!ticketResult.success) {
+                        console.log('[whtCreditNote.flow::handleInput] branch: ticket creation failed');
+                        console.log('[whtCreditNote.flow::handleInput] EXIT', { flow_complete: true, error: 'ticket creation failed' });
                         return {
                             message: "I'm sorry, there was an issue creating your support ticket.\n\n" +
                                 "Please try again later or type *help* to speak with an agent.",
                             flow_complete: true,
                         };
                     }
+                    console.log('[whtCreditNote.flow::handleInput] branch: ticket created', { reference: ticketResult.data.reference });
+                    console.log('[whtCreditNote.flow::handleInput] EXIT', { flow_complete: true });
                     return {
                         message: `Your WHT support ticket has been created.\n\n` +
                             `*Ticket Reference:* ${ticketResult.data.reference}\n` +
@@ -255,6 +314,8 @@ class WHTCreditNoteFlow {
                         flow_complete: true,
                     };
                 }
+                console.log('[whtCreditNote.flow::handleInput] branch: case 4 fallback');
+                console.log('[whtCreditNote.flow::handleInput] EXIT', { flow_complete: true });
                 return {
                     message: "Thank you! If you need another credit note, just say *WHT credit note*.\n\n" +
                         "Type *menu* to see other services.",
@@ -262,6 +323,8 @@ class WHTCreditNoteFlow {
                 };
             }
             default:
+                console.log('[whtCreditNote.flow::handleInput] branch: default case - unknown step');
+                console.log('[whtCreditNote.flow::handleInput] EXIT', { next_step: 0, awaiting_input: 'lookup_method' });
                 return {
                     message: "Something went wrong. Let's start the WHT credit note request again.",
                     next_step: 0,
@@ -271,13 +334,17 @@ class WHTCreditNoteFlow {
     }
     /** Look up WHT deduction details from Taxly */
     async lookupWHTDeduction(phone, data) {
+        console.log('[whtCreditNote.flow::lookupWHTDeduction] ENTER', { phone, method: data.lookup_method });
         const lookupMethod = data.lookup_method;
         const reference = lookupMethod === "reference"
             ? data.payment_reference
             : data.agent_tin;
         try {
+            console.log('[whtCreditNote.flow::lookupWHTDeduction] branch: calling taxly verifyEInvoice');
             const result = await taxlyService.verifyEInvoice(reference);
             if (!result.success || !result.data) {
+                console.log('[whtCreditNote.flow::lookupWHTDeduction] branch: not found / error');
+                console.log('[whtCreditNote.flow::lookupWHTDeduction] EXIT', { next_step: 0, awaiting_input: 'not_found_action' });
                 return {
                     message: "I couldn't find any WHT deduction records matching your input.\n\n" +
                         "This could mean:\n" +
@@ -297,6 +364,8 @@ class WHTCreditNoteFlow {
             const whtData = result.data;
             data.selected_wht = whtData;
             const remittedStatus = whtData.is_remitted ? "REMITTED" : "NOT YET REMITTED";
+            console.log('[whtCreditNote.flow::lookupWHTDeduction] branch: WHT found', { is_remitted: whtData.is_remitted });
+            console.log('[whtCreditNote.flow::lookupWHTDeduction] EXIT', { next_step: whtData.is_remitted ? 2 : 0, remittedStatus });
             return {
                 message: `*WHT Deduction Found*\n\n` +
                     `Deducting Party: ${whtData.deducting_party_name}\n` +
@@ -328,6 +397,8 @@ class WHTCreditNoteFlow {
             };
         }
         catch {
+            console.log('[whtCreditNote.flow::lookupWHTDeduction] branch: catch block - error');
+            console.log('[whtCreditNote.flow::lookupWHTDeduction] EXIT', { flow_complete: true, error: 'exception thrown' });
             return {
                 message: "I encountered an error while looking up the WHT deduction.\n\n" +
                     "Please try again later or type *help* to speak with an agent.",
@@ -337,12 +408,15 @@ class WHTCreditNoteFlow {
     }
     /** Parse the credit note details from user input */
     parseCreditDetails(input, data) {
+        console.log('[whtCreditNote.flow::parseCreditDetails] ENTER', { inputLen: input.length });
         const lines = input
             .trim()
             .split("\n")
             .map((l) => l.trim())
             .filter(Boolean);
         if (lines.length < 2) {
+            console.log('[whtCreditNote.flow::parseCreditDetails] branch: insufficient lines');
+            console.log('[whtCreditNote.flow::parseCreditDetails] EXIT', { next_step: 2, awaiting_input: 'credit_details' });
             return {
                 message: "I need both pieces of information on separate lines:\n\n" +
                     "1. *Tax period* (e.g., 2025-Q1)\n" +
@@ -355,6 +429,8 @@ class WHTCreditNoteFlow {
         const [period, tin] = lines;
         // Validate period format
         if (!/^\d{4}(-Q[1-4]|-\d{2})?$/.test(period)) {
+            console.log('[whtCreditNote.flow::parseCreditDetails] branch: invalid period format');
+            console.log('[whtCreditNote.flow::parseCreditDetails] EXIT', { next_step: 2, awaiting_input: 'credit_details' });
             return {
                 message: "The period format doesn't look right. Please use one of these formats:\n\n" +
                     "- *YYYY-Q1* through *YYYY-Q4* (quarterly)\n" +
@@ -370,6 +446,8 @@ class WHTCreditNoteFlow {
         // Validate TIN
         const cleanTin = tin.replace(/[\s-]/g, "");
         if (!/^\d{10}$/.test(cleanTin)) {
+            console.log('[whtCreditNote.flow::parseCreditDetails] branch: invalid TIN');
+            console.log('[whtCreditNote.flow::parseCreditDetails] EXIT', { next_step: 2, awaiting_input: 'credit_details' });
             return {
                 message: "The TIN must be exactly *10 digits*. Please provide both details again:\n\n" +
                     "1. Tax period\n" +
@@ -380,8 +458,10 @@ class WHTCreditNoteFlow {
         }
         data.credit_period = period;
         data.taxpayer_tin = cleanTin;
+        console.log('[whtCreditNote.flow::parseCreditDetails] branch: valid credit details captured', { period });
         // Build review summary
         const wht = data.selected_wht;
+        console.log('[whtCreditNote.flow::parseCreditDetails] EXIT', { next_step: 3, awaiting_input: 'confirmation' });
         return {
             message: `*Credit Note Request Summary*\n\n` +
                 `Deducting Party: ${wht.deducting_party_name}\n` +
@@ -405,9 +485,11 @@ class WHTCreditNoteFlow {
     }
     /** Submit credit note request and create WHT-CN ITSM ticket */
     async submitCreditNoteRequest(phone, data) {
+        console.log('[whtCreditNote.flow::submitCreditNoteRequest] ENTER', { phone });
         const wht = data.selected_wht;
         const taxpayerTin = data.taxpayer_tin;
         const creditPeriod = data.credit_period;
+        console.log('[whtCreditNote.flow::submitCreditNoteRequest] branch: creating WHT-CN ticket', { creditPeriod });
         const ticketResult = await itsmService.createTicket({
             type: "WHT-CN",
             subject: `WHT Credit Note Request - TIN ${taxpayerTin} - NGN ${wht.wht_amount.toLocaleString()}`,
@@ -427,6 +509,8 @@ class WHTCreditNoteFlow {
             priority: "medium",
         });
         if (!ticketResult.success) {
+            console.log('[whtCreditNote.flow::submitCreditNoteRequest] branch: ticket creation failed');
+            console.log('[whtCreditNote.flow::submitCreditNoteRequest] EXIT', { flow_complete: true, error: 'ticket creation failed' });
             return {
                 message: "I'm sorry, there was an issue submitting your credit note request.\n\n" +
                     "Please try again later or visit your nearest FIRS office with your WHT deduction evidence.\n\n" +
@@ -434,6 +518,8 @@ class WHTCreditNoteFlow {
                 flow_complete: true,
             };
         }
+        console.log('[whtCreditNote.flow::submitCreditNoteRequest] branch: ticket created', { reference: ticketResult.data.reference });
+        console.log('[whtCreditNote.flow::submitCreditNoteRequest] EXIT', { next_step: 4, awaiting_input: 'post_submit_action' });
         return {
             message: `Your WHT credit note request has been submitted successfully!\n\n` +
                 `*Ticket Reference:* ${ticketResult.data.reference}\n` +

@@ -3,7 +3,13 @@ class CINService {
     baseUrl = CIN_BASE_URL;
     apiKey = CIN_API_KEY;
     async logEvent(eventType, data) {
+        console.log("[cin.service::logEvent] ENTER", {
+            eventType,
+            dataKeys: Object.keys(data ?? {}),
+            baseUrl: this.baseUrl,
+        });
         console.log("[CIN] logEvent stub called:", eventType, JSON.stringify(data));
+        console.log("[cin.service::logEvent] EXIT", { eventType, status: 201 });
         return {
             success: true,
             message: `Event '${eventType}' logged successfully (stub)`,
@@ -11,7 +17,18 @@ class CINService {
         };
     }
     async getAnalytics(phone, dateRange) {
+        console.log("[cin.service::getAnalytics] ENTER", {
+            hasPhone: !!phone,
+            hasDateRange: !!dateRange,
+        });
         console.log("[CIN] getAnalytics stub called:", phone ?? "(all users)", dateRange ? JSON.stringify(dateRange) : "(all time)");
+        if (phone) {
+            console.log("[cin.service::getAnalytics] branch: per-user metrics included");
+        }
+        else {
+            console.log("[cin.service::getAnalytics] branch: aggregate analytics only");
+        }
+        console.log("[cin.service::getAnalytics] EXIT", { status: 200 });
         return {
             success: true,
             message: "Analytics retrieved successfully (stub)",

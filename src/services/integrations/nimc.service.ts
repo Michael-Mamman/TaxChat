@@ -11,8 +11,13 @@ class NIMCService {
   async verifyNIN(
     nin: string
   ): Promise<IntegrationResponse<NINVerificationResult>> {
+    console.log("[nimc.service::verifyNIN] ENTER", {
+      ninLength: nin?.length,
+      baseUrl: this.baseUrl,
+    });
     console.log("[NIMC] verifyNIN stub called:", nin);
 
+    console.log("[nimc.service::verifyNIN] EXIT", { status: 200, is_valid: true });
     return {
       success: true,
       message: "NIN verified successfully (stub)",
@@ -33,8 +38,13 @@ class NIMCService {
   async getNINDetails(
     nin: string
   ): Promise<IntegrationResponse<NINVerificationResult>> {
+    console.log("[nimc.service::getNINDetails] ENTER", {
+      ninLength: nin?.length,
+      baseUrl: this.baseUrl,
+    });
     console.log("[NIMC] getNINDetails stub called:", nin);
 
+    console.log("[nimc.service::getNINDetails] EXIT", { status: 200 });
     return {
       success: true,
       message: "NIN details retrieved successfully (stub)",
@@ -57,12 +67,21 @@ class NIMCService {
     nin: string,
     photoBase64: string
   ): Promise<IntegrationResponse<NINVerificationResult>> {
+    console.log("[nimc.service::verifyNINWithBiometric] ENTER", {
+      ninLength: nin?.length,
+      photoLength: photoBase64?.length,
+      baseUrl: this.baseUrl,
+    });
     console.log(
       "[NIMC] verifyNINWithBiometric stub called:",
       nin,
       `photo_length=${photoBase64.length}`
     );
 
+    console.log("[nimc.service::verifyNINWithBiometric] EXIT", {
+      status: 200,
+      is_valid: true,
+    });
     return {
       success: true,
       message: "NIN biometric verification successful (stub)",

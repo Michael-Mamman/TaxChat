@@ -3,8 +3,23 @@ class TaxlyService {
     baseUrl = TAXLY_BASE_URL;
     apiKey = TAXLY_API_KEY;
     async getEInvoiceData(tin, period) {
+        console.log("[taxly.service::getEInvoiceData] ENTER", {
+            tinLength: tin?.length,
+            hasPeriod: !!period,
+            baseUrl: this.baseUrl,
+        });
         console.log("[Taxly] getEInvoiceData stub called:", tin, period);
+        if (period) {
+            console.log("[taxly.service::getEInvoiceData] branch: using provided period");
+        }
+        else {
+            console.log("[taxly.service::getEInvoiceData] branch: defaulting to current period");
+        }
         const effectivePeriod = period ?? `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+        console.log("[taxly.service::getEInvoiceData] EXIT", {
+            status: 200,
+            effectivePeriod,
+        });
         return {
             success: true,
             message: "E-Invoice data retrieved successfully (stub)",
@@ -22,7 +37,15 @@ class TaxlyService {
         };
     }
     async verifyEInvoice(invoiceRef) {
+        console.log("[taxly.service::verifyEInvoice] ENTER", {
+            invoiceRef,
+            baseUrl: this.baseUrl,
+        });
         console.log("[Taxly] verifyEInvoice stub called:", invoiceRef);
+        console.log("[taxly.service::verifyEInvoice] EXIT", {
+            invoiceRef,
+            status: 200,
+        });
         return {
             success: true,
             message: "E-Invoice verified successfully (stub)",
@@ -43,7 +66,18 @@ class TaxlyService {
         };
     }
     async getWHTCreditNotes(identifier) {
+        console.log("[taxly.service::getWHTCreditNotes] ENTER", {
+            identifierLength: identifier?.length,
+            baseUrl: this.baseUrl,
+        });
         console.log("[Taxly] getWHTCreditNotes stub called:", identifier);
+        if (identifier.length === 10) {
+            console.log("[taxly.service::getWHTCreditNotes] branch: identifier treated as TIN");
+        }
+        else {
+            console.log("[taxly.service::getWHTCreditNotes] branch: identifier treated as invoice ref");
+        }
+        console.log("[taxly.service::getWHTCreditNotes] EXIT", { status: 200, count: 1 });
         return {
             success: true,
             message: "WHT credit notes retrieved successfully (stub)",

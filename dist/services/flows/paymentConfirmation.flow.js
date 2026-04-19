@@ -12,14 +12,19 @@ import remitaService from "../integrations/remita.service.js";
  */
 class PaymentConfirmationFlow {
     async start(phone, entities) {
+        console.log('[paymentConfirmation.flow::start] ENTER', { phone, entityKeys: entities ? Object.keys(entities) : [] });
         // If a reference was already extracted from NLU
         if (entities?.reference) {
+            console.log('[paymentConfirmation.flow::start] branch: entities.reference provided');
+            console.log('[paymentConfirmation.flow::start] EXIT', { next_step: 1, awaiting_input: 'lookup_in_progress' });
             return {
                 message: `I'll look up payment reference *${entities.reference}* for you. One moment...`,
                 next_step: 1,
                 awaiting_input: "lookup_in_progress",
             };
         }
+        console.log('[paymentConfirmation.flow::start] branch: default - ask for reference');
+        console.log('[paymentConfirmation.flow::start] EXIT', { next_step: 0, awaiting_input: 'payment_reference' });
         return {
             message: "I can help you confirm a tax payment.\n\n" +
                 "Please provide one of the following:\n\n" +
@@ -32,15 +37,19 @@ class PaymentConfirmationFlow {
         };
     }
     async handleInput(phone, input, step, data) {
+        console.log('[paymentConfirmation.flow::handleInput] ENTER', { phone, step, inputLen: input.length });
         switch (step) {
             // ------------------------------------------------------------------
             // Step 0: Capture the payment reference or photo
             // ------------------------------------------------------------------
             case 0: {
+                console.log('[paymentConfirmation.flow::handleInput] branch: case 0 - capture reference/photo');
                 const trimmed = input.trim();
                 // Check if it's a media message (receipt photo)
                 if (trimmed.startsWith("media:") || trimmed.startsWith("image:")) {
+                    console.log('[paymentConfirmation.flow::handleInput] branch: media/image received');
                     data.receipt_media = trimmed;
+                    console.log('[paymentConfirmation.flow::handleInput] EXIT', { next_step: 1, awaiting_input: 'receipt_details' });
                     return {
                         message: "Thank you for sending the receipt image. I'm extracting the payment details...\n\n" +
                             "_This may take a moment._\n\n" +
@@ -53,6 +62,8 @@ class PaymentConfirmationFlow {
                 // Validate reference format (flexible)
                 const reference = trimmed.replace(/\s/g, "").toUpperCase();
                 if (reference.length < 6) {
+                    console.log('[paymentConfirmation.flow::handleInput] branch: reference too short');
+                    console.log('[paymentConfirmation.flow::handleInput] EXIT', { next_step: 0, awaiting_input: 'payment_reference' });
                     return {
                         message: "That reference seems too short. A payment reference is typically *12 or more characters*.\n\n" +
                             "Please re-enter the reference, or send a photo of your receipt:",
@@ -61,6 +72,8 @@ class PaymentConfirmationFlow {
                     };
                 }
                 data.reference = reference;
+                console.log('[paymentConfirmation.flow::handleInput] branch: dispatching lookupPayment', { refPreview: reference.slice(0, 3) + '***' });
+                console.log('[paymentConfirmation.flow::handleInput] EXIT', { dispatched: 'lookupPayment' });
                 // Look up the payment
                 return this.lookupPayment(phone, reference, data);
             }
@@ -68,30 +81,42 @@ class PaymentConfirmationFlow {
             // Step 1: Process lookup result or receipt details
             // ------------------------------------------------------------------
             case 1: {
+                console.log('[paymentConfirmation.flow::handleInput] branch: case 1');
                 const trimmed = input.trim();
                 // If we received receipt details after image upload
                 if (data.receipt_media) {
+                    console.log('[paymentConfirmation.flow::handleInput] branch: receipt details after image');
                     data.receipt_details = trimmed;
                     // Simulate OCR-based reference extraction
                     const simulatedRef = `RRR-${Date.now().toString().slice(-12)}`;
                     data.reference = simulatedRef;
+                    console.log('[paymentConfirmation.flow::handleInput] EXIT', { dispatched: 'lookupPayment(simulated)' });
                     return this.lookupPayment(phone, simulatedRef, data);
                 }
                 // Handle the post-lookup user actions
+                console.log('[paymentConfirmation.flow::handleInput] branch: delegating to handlePostLookupAction');
+                console.log('[paymentConfirmation.flow::handleInput] EXIT', { dispatched: 'handlePostLookupAction' });
                 return this.handlePostLookupAction(phone, trimmed, data);
             }
             // ------------------------------------------------------------------
             // Step 2: Display result and handle follow-up actions
             // ------------------------------------------------------------------
             case 2: {
+                console.log('[paymentConfirmation.flow::handleInput] branch: case 2 - post-result action');
                 const choice = input.trim().toLowerCase();
                 if (choice === "trace" || choice === "trace payment" || choice === "trace_payment") {
+                    console.log('[paymentConfirmation.flow::handleInput] branch: trace payment');
+                    console.log('[paymentConfirmation.flow::handleInput] EXIT', { dispatched: 'createPaymentTrace' });
                     return this.createPaymentTrace(phone, data);
                 }
                 if (choice === "retry" || choice === "try another") {
+                    console.log('[paymentConfirmation.flow::handleInput] branch: retry');
+                    console.log('[paymentConfirmation.flow::handleInput] EXIT', { dispatched: 'start' });
                     return this.start(phone);
                 }
                 if (choice === "generate_rrr" || choice === "generate rrr" || choice === "new payment") {
+                    console.log('[paymentConfirmation.flow::handleInput] branch: generate_rrr');
+                    console.log('[paymentConfirmation.flow::handleInput] EXIT', { flow_complete: true });
                     return {
                         message: "To generate a new Remita Retrieval Reference (RRR), please provide:\n\n" +
                             "1. *Tax Type* (e.g., CIT, VAT, PAYE, WHT)\n" +
@@ -103,12 +128,16 @@ class PaymentConfirmationFlow {
                     };
                 }
                 if (choice === "done" || choice === "no" || choice === "exit") {
+                    console.log('[paymentConfirmation.flow::handleInput] branch: done');
+                    console.log('[paymentConfirmation.flow::handleInput] EXIT', { flow_complete: true });
                     return {
                         message: "Thank you! If you need to check another payment, just say *confirm payment*.\n\n" +
                             "Type *menu* to see other services.",
                         flow_complete: true,
                     };
                 }
+                console.log('[paymentConfirmation.flow::handleInput] branch: case 2 default - re-prompt');
+                console.log('[paymentConfirmation.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'post_result_action' });
                 return {
                     message: "Please select an option:",
                     buttons: [
@@ -120,6 +149,8 @@ class PaymentConfirmationFlow {
                 };
             }
             default:
+                console.log('[paymentConfirmation.flow::handleInput] branch: default case - unknown step');
+                console.log('[paymentConfirmation.flow::handleInput] EXIT', { next_step: 0, awaiting_input: 'payment_reference' });
                 return {
                     message: "Something went wrong. Let's start the payment confirmation again.",
                     next_step: 0,
@@ -129,8 +160,11 @@ class PaymentConfirmationFlow {
     }
     /** Look up a payment reference and return appropriate result */
     async lookupPayment(phone, reference, data) {
+        console.log('[paymentConfirmation.flow::lookupPayment] ENTER', { phone, refPreview: reference.slice(0, 3) + '***' });
         const result = await remitaService.getPaymentStatus(reference);
         if (!result.success || !result.data) {
+            console.log('[paymentConfirmation.flow::lookupPayment] branch: lookup failed');
+            console.log('[paymentConfirmation.flow::lookupPayment] EXIT', { flow_complete: true });
             return {
                 message: "I couldn't reach the payment system at this time. Please try again in a few minutes.\n\n" +
                     "If this persists, type *help* to speak with an agent.",
@@ -139,8 +173,11 @@ class PaymentConfirmationFlow {
         }
         const payment = result.data;
         data.payment_result = payment;
+        console.log('[paymentConfirmation.flow::lookupPayment] branch: switch on payment.status', { status: payment.status });
         switch (payment.status) {
             case "POSTED":
+                console.log('[paymentConfirmation.flow::lookupPayment] branch: POSTED');
+                console.log('[paymentConfirmation.flow::lookupPayment] EXIT', { status: 'POSTED', next_step: 2 });
                 return {
                     message: `*Payment Confirmed!*\n\n` +
                         `Reference: ${payment.reference}\n` +
@@ -161,6 +198,8 @@ class PaymentConfirmationFlow {
                     awaiting_input: "post_result_action",
                 };
             case "RECEIVED":
+                console.log('[paymentConfirmation.flow::lookupPayment] branch: RECEIVED');
+                console.log('[paymentConfirmation.flow::lookupPayment] EXIT', { status: 'RECEIVED', next_step: 2 });
                 return {
                     message: `*Payment Received (Processing)*\n\n` +
                         `Reference: ${payment.reference}\n` +
@@ -179,6 +218,8 @@ class PaymentConfirmationFlow {
                     awaiting_input: "post_result_action",
                 };
             case "NOT_FOUND":
+                console.log('[paymentConfirmation.flow::lookupPayment] branch: NOT_FOUND');
+                console.log('[paymentConfirmation.flow::lookupPayment] EXIT', { status: 'NOT_FOUND', next_step: 2 });
                 return {
                     message: `*Payment Not Found*\n\n` +
                         `Reference: ${reference}\n\n` +
@@ -196,6 +237,8 @@ class PaymentConfirmationFlow {
                     awaiting_input: "not_found_action",
                 };
             case "FAILED":
+                console.log('[paymentConfirmation.flow::lookupPayment] branch: FAILED');
+                console.log('[paymentConfirmation.flow::lookupPayment] EXIT', { status: 'FAILED', next_step: 2 });
                 return {
                     message: `*Payment Failed*\n\n` +
                         `Reference: ${payment.reference}\n` +
@@ -211,6 +254,8 @@ class PaymentConfirmationFlow {
                     awaiting_input: "failed_action",
                 };
             default:
+                console.log('[paymentConfirmation.flow::lookupPayment] branch: unknown status - escalating', { status: payment.status });
+                console.log('[paymentConfirmation.flow::lookupPayment] EXIT', { escalate: true, flow_complete: true });
                 return {
                     message: `Payment status for reference *${reference}* is: *${payment.status}*\n\n` +
                         "I'm not sure how to interpret this status. Would you like to speak with an agent?",
@@ -222,8 +267,11 @@ class PaymentConfirmationFlow {
     }
     /** Handle actions after payment lookup */
     handlePostLookupAction(phone, input, data) {
+        console.log('[paymentConfirmation.flow::handlePostLookupAction] ENTER', { phone, inputLen: input.length });
         const choice = input.toLowerCase();
         if (choice === "trace" || choice === "trace payment") {
+            console.log('[paymentConfirmation.flow::handlePostLookupAction] branch: trace');
+            console.log('[paymentConfirmation.flow::handlePostLookupAction] EXIT', { next_step: 2, awaiting_input: 'trace_details' });
             // Delegate to step 2 trace handling
             return {
                 message: "I'll create a payment trace request. This will be investigated by our finance team.\n\n" +
@@ -234,6 +282,8 @@ class PaymentConfirmationFlow {
                 awaiting_input: "trace_details",
             };
         }
+        console.log('[paymentConfirmation.flow::handlePostLookupAction] branch: default');
+        console.log('[paymentConfirmation.flow::handlePostLookupAction] EXIT', { next_step: 2, awaiting_input: 'post_result_action' });
         return {
             message: "Please select an option:",
             buttons: [
@@ -246,10 +296,12 @@ class PaymentConfirmationFlow {
     }
     /** Create a PAY-TRACE ticket in ITSM */
     async createPaymentTrace(phone, data) {
+        console.log('[paymentConfirmation.flow::createPaymentTrace] ENTER', { phone });
         // This would normally be called via itsmService, but since we only
         // import remitaService in this flow, we build a minimal trace ticket
         // structure. In production, the orchestrator would route to ITSM.
         const reference = data.reference;
+        console.log('[paymentConfirmation.flow::createPaymentTrace] EXIT', { flow_complete: true, reference });
         return {
             message: `A payment trace request has been created.\n\n` +
                 `*Reference:* PAY-TRACE-${Date.now().toString().slice(-8)}\n` +

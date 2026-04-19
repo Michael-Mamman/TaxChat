@@ -30,21 +30,31 @@ const FLOW_AUTH_MAP: Record<FlowName, number> = {
 
 class AuthService {
   getTierRequirements(tier: number): TierRequirement {
-    return TIER_REQUIREMENTS[tier] ?? TIER_REQUIREMENTS[0]!;
+    console.log('[auth.service::getTierRequirements] ENTER', { tier });
+    const result = TIER_REQUIREMENTS[tier] ?? TIER_REQUIREMENTS[0]!;
+    console.log('[auth.service::getTierRequirements] EXIT', { tier: result.tier });
+    return result;
   }
 
   getRequiredTierForFlow(flowName: FlowName): number {
-    return FLOW_AUTH_MAP[flowName] ?? 0;
+    console.log('[auth.service::getRequiredTierForFlow] ENTER', { flowName });
+    const result = FLOW_AUTH_MAP[flowName] ?? 0;
+    console.log('[auth.service::getRequiredTierForFlow] EXIT', { flowName, requiredTier: result });
+    return result;
   }
 
   async initiateAuth(
     phone: string,
     requiredTier: number,
   ): Promise<AuthResult> {
+    console.log('[auth.service::initiateAuth] ENTER', { phone, requiredTier });
     // Check existing session
     const currentTier = await sessionService.getSessionTier(phone);
+    console.log('[auth.service::initiateAuth] branch: got currentTier', { currentTier });
 
     if (currentTier >= requiredTier) {
+      console.log('[auth.service::initiateAuth] branch: already authenticated');
+      console.log('[auth.service::initiateAuth] EXIT', { success: true, tier: currentTier });
       return {
         success: true,
         tier: currentTier,
@@ -56,6 +66,8 @@ class AuthService {
 
     // Determine next step needed
     if (requirements.requires_tin && currentTier < AuthTier.TIER_1) {
+      console.log('[auth.service::initiateAuth] branch: requires_tin');
+      console.log('[auth.service::initiateAuth] EXIT', { requires_next: 'tin' });
       return {
         success: false,
         tier: currentTier,
@@ -65,6 +77,8 @@ class AuthService {
     }
 
     if (requirements.requires_otp && currentTier < AuthTier.TIER_1) {
+      console.log('[auth.service::initiateAuth] branch: requires_otp');
+      console.log('[auth.service::initiateAuth] EXIT', { requires_next: 'otp' });
       return {
         success: false,
         tier: currentTier,
@@ -74,6 +88,8 @@ class AuthService {
     }
 
     if (requirements.requires_nin_or_bvn && currentTier < AuthTier.TIER_2) {
+      console.log('[auth.service::initiateAuth] branch: requires_nin_or_bvn');
+      console.log('[auth.service::initiateAuth] EXIT', { requires_next: 'nin_bvn' });
       return {
         success: false,
         tier: currentTier,
@@ -83,6 +99,8 @@ class AuthService {
     }
 
     if (requirements.requires_kyc && currentTier < AuthTier.TIER_3) {
+      console.log('[auth.service::initiateAuth] branch: requires_kyc');
+      console.log('[auth.service::initiateAuth] EXIT', { requires_next: 'kyc' });
       return {
         success: false,
         tier: currentTier,
@@ -91,6 +109,8 @@ class AuthService {
       };
     }
 
+    console.log('[auth.service::initiateAuth] branch: auth complete fallthrough');
+    console.log('[auth.service::initiateAuth] EXIT', { success: true, tier: currentTier });
     return {
       success: true,
       tier: currentTier,
@@ -102,9 +122,12 @@ class AuthService {
     phone: string,
     tin: string,
   ): Promise<AuthResult> {
+    console.log('[auth.service::verifyTIN] ENTER', { phone, tinLength: tin?.length });
     const result = await jtbService.verifyTIN(tin);
 
     if (!result.success || !result.data) {
+      console.log('[auth.service::verifyTIN] branch: TIN verify failed');
+      console.log('[auth.service::verifyTIN] EXIT', { success: false });
       return {
         success: false,
         tier: 0,
@@ -112,6 +135,7 @@ class AuthService {
       };
     }
 
+    console.log('[auth.service::verifyTIN] branch: TIN verify success, updating taxpayer');
     // Update taxpayer record
     await Taxpayer.findOneAndUpdate(
       { phone },
@@ -124,9 +148,11 @@ class AuthService {
       { upsert: true },
     );
 
+    console.log('[auth.service::verifyTIN] branch: sending OTP');
     // Send OTP to registered phone
     const otpResult = await otpService.sendOTP(phone);
 
+    console.log('[auth.service::verifyTIN] EXIT', { success: true, requires_next: 'otp' });
     return {
       success: true,
       tier: 0,
@@ -139,9 +165,12 @@ class AuthService {
     phone: string,
     code: string,
   ): Promise<AuthResult> {
+    console.log('[auth.service::verifyOTP] ENTER', { phone, otpPresent: !!code });
     const otpResult = await otpService.verifyOTP(phone, code);
 
     if (!otpResult.valid) {
+      console.log('[auth.service::verifyOTP] branch: invalid OTP');
+      console.log('[auth.service::verifyOTP] EXIT', { success: false });
       return {
         success: false,
         tier: 0,
@@ -149,6 +178,7 @@ class AuthService {
       };
     }
 
+    console.log('[auth.service::verifyOTP] branch: valid OTP, creating session');
     // Create or upgrade session to Tier 1
     const session = await sessionService.createSession(phone, AuthTier.TIER_1);
 
@@ -158,6 +188,7 @@ class AuthService {
       .filter(Boolean)
       .join(" ");
 
+    console.log('[auth.service::verifyOTP] EXIT', { success: true, tier: AuthTier.TIER_1, sessionPresent: !!session });
     return {
       success: true,
       tier: AuthTier.TIER_1,
@@ -171,9 +202,13 @@ class AuthService {
     type: "nin" | "bvn",
     value: string,
   ): Promise<AuthResult> {
+    console.log('[auth.service::verifyIdentity] ENTER', { phone, type, valueLength: value?.length });
     if (type === "nin") {
+      console.log('[auth.service::verifyIdentity] branch: type=nin');
       const result = await nimcService.verifyNIN(value);
       if (!result.success || !result.data?.is_valid) {
+        console.log('[auth.service::verifyIdentity] branch: NIN invalid');
+        console.log('[auth.service::verifyIdentity] EXIT', { success: false, type });
         return {
           success: false,
           tier: 1,
@@ -181,10 +216,14 @@ class AuthService {
         };
       }
 
+      console.log('[auth.service::verifyIdentity] branch: NIN valid, updating taxpayer');
       await Taxpayer.findOneAndUpdate({ phone }, { nin: value });
     } else {
+      console.log('[auth.service::verifyIdentity] branch: type=bvn');
       const result = await nibssService.verifyBVN(value);
       if (!result.success || !result.data?.is_valid) {
+        console.log('[auth.service::verifyIdentity] branch: BVN invalid');
+        console.log('[auth.service::verifyIdentity] EXIT', { success: false, type });
         return {
           success: false,
           tier: 1,
@@ -192,12 +231,15 @@ class AuthService {
         };
       }
 
+      console.log('[auth.service::verifyIdentity] branch: BVN valid, updating taxpayer');
       await Taxpayer.findOneAndUpdate({ phone }, { bvn: value });
     }
 
+    console.log('[auth.service::verifyIdentity] branch: upgrading session to TIER_2');
     // Upgrade to Tier 2
     await sessionService.upgradeSession(phone, AuthTier.TIER_2);
 
+    console.log('[auth.service::verifyIdentity] EXIT', { success: true, tier: AuthTier.TIER_2 });
     return {
       success: true,
       tier: AuthTier.TIER_2,
@@ -210,12 +252,20 @@ class AuthService {
     nin: string,
     photoBase64?: string,
   ): Promise<AuthResult> {
+    console.log('[auth.service::verifyKYC] ENTER', { phone, ninLength: nin?.length, hasPhoto: !!photoBase64 });
     // Verify NIN with biometric if photo provided
-    const result = photoBase64
-      ? await nimcService.verifyNINWithBiometric(nin, photoBase64)
-      : await nimcService.verifyNIN(nin);
+    let result;
+    if (photoBase64) {
+      console.log('[auth.service::verifyKYC] branch: with biometric');
+      result = await nimcService.verifyNINWithBiometric(nin, photoBase64);
+    } else {
+      console.log('[auth.service::verifyKYC] branch: without biometric');
+      result = await nimcService.verifyNIN(nin);
+    }
 
     if (!result.success || !result.data?.is_valid) {
+      console.log('[auth.service::verifyKYC] branch: KYC invalid');
+      console.log('[auth.service::verifyKYC] EXIT', { success: false });
       return {
         success: false,
         tier: 2,
@@ -223,6 +273,7 @@ class AuthService {
       };
     }
 
+    console.log('[auth.service::verifyKYC] branch: KYC valid, updating taxpayer');
     // Update taxpayer with KYC data
     await Taxpayer.findOneAndUpdate(
       { phone },
@@ -234,9 +285,11 @@ class AuthService {
       },
     );
 
+    console.log('[auth.service::verifyKYC] branch: upgrading session to TIER_3');
     // Upgrade to Tier 3
     await sessionService.upgradeSession(phone, AuthTier.TIER_3);
 
+    console.log('[auth.service::verifyKYC] EXIT', { success: true, tier: AuthTier.TIER_3 });
     return {
       success: true,
       tier: AuthTier.TIER_3,
@@ -252,14 +305,17 @@ class AuthService {
     currentTier: number;
     requiredTier: number;
   }> {
+    console.log('[auth.service::checkAuthForFlow] ENTER', { phone, flowName });
     const requiredTier = this.getRequiredTierForFlow(flowName);
     const currentTier = await sessionService.getSessionTier(phone);
 
-    return {
+    const result = {
       authorized: currentTier >= requiredTier,
       currentTier,
       requiredTier,
     };
+    console.log('[auth.service::checkAuthForFlow] EXIT', result);
+    return result;
   }
 }
 

@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 dotenv.config();
+console.log('[config::module] ENTER - loading env');
 
 // === Server ===
 export const NODE_ENV = process.env.NODE_ENV;
@@ -26,6 +27,7 @@ export const FLOW_IDS = {
   WHT_CREDIT_NOTE: process.env.WHT_CREDIT_NOTE_FLOW || "",
   GENERAL_ENQUIRY: process.env.GENERAL_ENQUIRY_FLOW || "",
 };
+console.log('[config::module] FLOW_IDS loaded', { count: Object.keys(FLOW_IDS).length });
 
 // === External Integration URLs ===
 export const ITSM_BASE_URL = process.env.ITSM_BASE_URL || "";
@@ -61,8 +63,10 @@ export const MAX_OTP_ATTEMPTS = Number(process.env.MAX_OTP_ATTEMPTS) || 3;
 // === Logging ===
 const LOG_ALL_SECRETS = process.env.NODE_ENV === "development";
 if (LOG_ALL_SECRETS) {
+  console.log('[config::module] branch: development - logging non-secret values');
   console.log("[config] loaded:", { NODE_ENV, PORT, PHONE_NUMBER_ID });
 } else {
+  console.log('[config::module] branch: non-development - logging presence only');
   console.log("[config] secrets_present:", {
     NODE_ENV: Boolean(NODE_ENV),
     PORT: Boolean(PORT),
@@ -71,3 +75,4 @@ if (LOG_ALL_SECRETS) {
     MONGO_URI: Boolean(MONGO_URI),
   });
 }
+console.log('[config::module] EXIT - config module loaded');

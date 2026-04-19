@@ -12,6 +12,11 @@ class AkraaAIService {
     text: string,
     context?: Record<string, unknown>
   ): Promise<IntegrationResponse<NLUClassification>> {
+    console.log("[akraa-ai.service::classifyIntent] ENTER", {
+      textLength: text?.length,
+      hasContext: !!context,
+      baseUrl: this.baseUrl,
+    });
     console.log(
       "[AkraaAI] classifyIntent stub called:",
       text,
@@ -26,18 +31,22 @@ class AkraaAIService {
     const entities: Record<string, string> = {};
 
     if (lowerText.includes("tin") && lowerText.includes("register")) {
+      console.log("[akraa-ai.service::classifyIntent] branch: tin_registration matched");
       intent = "tin_registration";
       confidence = 0.95;
       suggestedFlow = "TIN_REGISTRATION";
     } else if (lowerText.includes("tin") || lowerText.includes("tax id")) {
+      console.log("[akraa-ai.service::classifyIntent] branch: tin_retrieval matched");
       intent = "tin_retrieval";
       confidence = 0.91;
       suggestedFlow = "TIN_RETRIEVAL";
     } else if (lowerText.includes("pay") || lowerText.includes("payment")) {
+      console.log("[akraa-ai.service::classifyIntent] branch: payment_confirmation matched");
       intent = "payment_confirmation";
       confidence = 0.89;
       suggestedFlow = "PAYMENT_CONFIRMATION";
     } else if (lowerText.includes("file") || lowerText.includes("filing")) {
+      console.log("[akraa-ai.service::classifyIntent] branch: filing_support matched");
       intent = "filing_support";
       confidence = 0.87;
       suggestedFlow = "FILING_SUPPORT";
@@ -45,6 +54,7 @@ class AkraaAIService {
       lowerText.includes("assessment") ||
       lowerText.includes("tax bill")
     ) {
+      console.log("[akraa-ai.service::classifyIntent] branch: assessment_query matched");
       intent = "assessment_query";
       confidence = 0.88;
       suggestedFlow = "ASSESSMENT_QUERY";
@@ -52,6 +62,7 @@ class AkraaAIService {
       lowerText.includes("penalty") ||
       lowerText.includes("fine")
     ) {
+      console.log("[akraa-ai.service::classifyIntent] branch: penalty_query matched");
       intent = "penalty_query";
       confidence = 0.86;
       suggestedFlow = "PENALTY_QUERY";
@@ -59,6 +70,7 @@ class AkraaAIService {
       lowerText.includes("clearance") ||
       lowerText.includes("tcc")
     ) {
+      console.log("[akraa-ai.service::classifyIntent] branch: tax_clearance matched");
       intent = "tax_clearance";
       confidence = 0.93;
       suggestedFlow = "TAX_CLEARANCE";
@@ -66,6 +78,7 @@ class AkraaAIService {
       lowerText.includes("wht") ||
       lowerText.includes("withholding")
     ) {
+      console.log("[akraa-ai.service::classifyIntent] branch: wht_credit_note matched");
       intent = "wht_credit_note";
       confidence = 0.9;
       suggestedFlow = "WHT_CREDIT_NOTE";
@@ -73,21 +86,36 @@ class AkraaAIService {
       lowerText.includes("update") &&
       lowerText.includes("profile")
     ) {
+      console.log("[akraa-ai.service::classifyIntent] branch: profile_update matched");
       intent = "profile_update";
       confidence = 0.92;
       suggestedFlow = "PROFILE_UPDATE";
+    } else {
+      console.log("[akraa-ai.service::classifyIntent] branch: default general_enquiry");
     }
 
     // Simple entity extraction from stub
     const tinMatch = text.match(/\b\d{10}\b/);
     if (tinMatch) {
+      console.log("[akraa-ai.service::classifyIntent] branch: tin entity found");
       entities["tin"] = tinMatch[0];
+    } else {
+      console.log("[akraa-ai.service::classifyIntent] branch: no tin entity");
     }
     const yearMatch = text.match(/\b(20\d{2})\b/);
     if (yearMatch) {
+      console.log("[akraa-ai.service::classifyIntent] branch: tax_year entity found");
       entities["tax_year"] = yearMatch[1]!;
+    } else {
+      console.log("[akraa-ai.service::classifyIntent] branch: no tax_year entity");
     }
 
+    console.log("[akraa-ai.service::classifyIntent] EXIT", {
+      intent,
+      confidence,
+      suggestedFlow,
+      entityCount: Object.keys(entities).length,
+    });
     return {
       success: true,
       message: "Intent classified successfully (stub)",
@@ -105,8 +133,12 @@ class AkraaAIService {
   async generateAnswer(
     question: string
   ): Promise<IntegrationResponse<{ answer: string; citations: string[]; confidence: number }>> {
+    console.log("[akraa-ai.service::generateAnswer] ENTER", {
+      questionLength: question?.length,
+    });
     console.log("[AkraaAI] generateAnswer stub called:", question);
 
+    console.log("[akraa-ai.service::generateAnswer] EXIT", { status: 200 });
     return {
       success: true,
       message: "Answer generated successfully (stub)",
@@ -133,6 +165,10 @@ class AkraaAIService {
     intent: string,
     context: Record<string, unknown>
   ): Promise<IntegrationResponse<NLUClassification>> {
+    console.log("[akraa-ai.service::generateResponse] ENTER", {
+      intent,
+      contextKeys: Object.keys(context ?? {}),
+    });
     console.log(
       "[AkraaAI] generateResponse stub called:",
       intent,
@@ -162,9 +198,16 @@ class AkraaAIService {
         "Thank you for contacting NRS TaxChat. How can I assist you today? I can help with TIN registration, tax filing, payments, assessments, and more.",
     };
 
+    if (responseMap[intent]) {
+      console.log("[akraa-ai.service::generateResponse] branch: mapped intent found");
+    } else {
+      console.log("[akraa-ai.service::generateResponse] branch: fallback to general_enquiry");
+    }
+
     const responseText =
       responseMap[intent] ?? responseMap["general_enquiry"]!;
 
+    console.log("[akraa-ai.service::generateResponse] EXIT", { intent, status: 200 });
     return {
       success: true,
       message: responseText,
@@ -182,6 +225,9 @@ class AkraaAIService {
   async extractEntities(
     text: string
   ): Promise<IntegrationResponse<NLUClassification>> {
+    console.log("[akraa-ai.service::extractEntities] ENTER", {
+      textLength: text?.length,
+    });
     console.log("[AkraaAI] extractEntities stub called:", text);
 
     const entities: Record<string, string> = {};
@@ -189,39 +235,63 @@ class AkraaAIService {
     // Stub entity extraction patterns
     const tinMatch = text.match(/\b\d{10}\b/);
     if (tinMatch) {
+      console.log("[akraa-ai.service::extractEntities] branch: tin match");
       entities["tin"] = tinMatch[0];
+    } else {
+      console.log("[akraa-ai.service::extractEntities] branch: no tin match");
     }
 
     const ninMatch = text.match(/\b\d{11}\b/);
     if (ninMatch) {
+      console.log("[akraa-ai.service::extractEntities] branch: nin match");
       entities["nin"] = ninMatch[0];
+    } else {
+      console.log("[akraa-ai.service::extractEntities] branch: no nin match");
     }
 
     const bvnMatch = text.match(/\b\d{11}\b/);
     if (bvnMatch) {
+      console.log("[akraa-ai.service::extractEntities] branch: bvn match");
       entities["bvn"] = bvnMatch[0];
+    } else {
+      console.log("[akraa-ai.service::extractEntities] branch: no bvn match");
     }
 
     const phoneMatch = text.match(/\b0[789][01]\d{8}\b/);
     if (phoneMatch) {
+      console.log("[akraa-ai.service::extractEntities] branch: phone match");
       entities["phone"] = phoneMatch[0];
+    } else {
+      console.log("[akraa-ai.service::extractEntities] branch: no phone match");
     }
 
     const yearMatch = text.match(/\b(20\d{2})\b/);
     if (yearMatch) {
+      console.log("[akraa-ai.service::extractEntities] branch: year match");
       entities["tax_year"] = yearMatch[1]!;
+    } else {
+      console.log("[akraa-ai.service::extractEntities] branch: no year match");
     }
 
     const emailMatch = text.match(/[\w.-]+@[\w.-]+\.\w+/);
     if (emailMatch) {
+      console.log("[akraa-ai.service::extractEntities] branch: email match");
       entities["email"] = emailMatch[0];
+    } else {
+      console.log("[akraa-ai.service::extractEntities] branch: no email match");
     }
 
     const rrrMatch = text.match(/RRR[-\s]?\d{12}/i);
     if (rrrMatch) {
+      console.log("[akraa-ai.service::extractEntities] branch: rrr match");
       entities["rrr"] = rrrMatch[0];
+    } else {
+      console.log("[akraa-ai.service::extractEntities] branch: no rrr match");
     }
 
+    console.log("[akraa-ai.service::extractEntities] EXIT", {
+      entityCount: Object.keys(entities).length,
+    });
     return {
       success: true,
       message: `Extracted ${Object.keys(entities).length} entities (stub)`,

@@ -18,11 +18,15 @@ class AssessmentQueryFlow {
     phone: string,
     entities?: Record<string, string>,
   ): Promise<FlowStepResult> {
+    console.log('[assessmentQuery.flow::start] ENTER', { phone, entityKeys: entities ? Object.keys(entities) : [] });
     // If NLU already extracted a query type, advance
     if (entities?.query_type) {
+      console.log('[assessmentQuery.flow::start] branch: entities.query_type provided');
       const queryType = entities.query_type.toLowerCase();
       const validTypes = ["view_assessment", "check_outstanding", "request_review"];
       if (validTypes.includes(queryType)) {
+        console.log('[assessmentQuery.flow::start] branch: valid query_type - advancing to step 1');
+        console.log('[assessmentQuery.flow::start] EXIT', { next_step: 1, awaiting_input: 'tin' });
         return {
           message:
             `I'll help you with that. Please provide your *TIN (Taxpayer Identification Number)*:\n\n` +
@@ -35,6 +39,8 @@ class AssessmentQueryFlow {
 
     // If NLU extracted a TIN, skip the query type selection and show options with TIN pre-loaded
     if (entities?.tin && /^\d{10}$/.test(entities.tin)) {
+      console.log('[assessmentQuery.flow::start] branch: entities.tin provided (valid 10-digit)');
+      console.log('[assessmentQuery.flow::start] EXIT', { next_step: 0, awaiting_input: 'query_type' });
       return {
         message:
           `I found TIN *${entities.tin.slice(0, 3)}****${entities.tin.slice(-2)}*. What would you like to do?`,
@@ -60,6 +66,8 @@ class AssessmentQueryFlow {
       };
     }
 
+    console.log('[assessmentQuery.flow::start] branch: default path - asking for query type');
+    console.log('[assessmentQuery.flow::start] EXIT', { next_step: 0, awaiting_input: 'query_type' });
     return {
       message:
         "I can help you with your tax assessments.\n\n" +
@@ -92,15 +100,19 @@ class AssessmentQueryFlow {
     step: number,
     data: Record<string, unknown>,
   ): Promise<FlowStepResult> {
+    console.log('[assessmentQuery.flow::handleInput] ENTER', { phone, step, inputLen: input.length, inputPreview: input.slice(0, 3) + '***' });
     switch (step) {
       // ------------------------------------------------------------------
       // Step 0: Capture query type
       // ------------------------------------------------------------------
       case 0: {
+        console.log('[assessmentQuery.flow::handleInput] branch: case 0 - capture query type');
         const queryType = input.trim().toLowerCase();
         const validTypes = ["view_assessment", "check_outstanding", "request_review"];
 
         if (!validTypes.includes(queryType)) {
+          console.log('[assessmentQuery.flow::handleInput] branch: invalid query type - re-prompt');
+          console.log('[assessmentQuery.flow::handleInput] EXIT', { next_step: 0, awaiting_input: 'query_type' });
           return {
             message:
               "Please select one of the options below:",
@@ -115,7 +127,8 @@ class AssessmentQueryFlow {
         }
 
         data.query_type = queryType;
-
+        console.log('[assessmentQuery.flow::handleInput] branch: valid query type - advance to step 1', { queryType });
+        console.log('[assessmentQuery.flow::handleInput] EXIT', { next_step: 1, awaiting_input: 'tin' });
         return {
           message:
             "Please provide your *TIN (Taxpayer Identification Number)*:\n\n" +
@@ -129,9 +142,12 @@ class AssessmentQueryFlow {
       // Step 1: Collect TIN and fetch assessment data via TaxProMax
       // ------------------------------------------------------------------
       case 1: {
+        console.log('[assessmentQuery.flow::handleInput] branch: case 1 - collect TIN');
         const tin = input.trim().replace(/[\s-]/g, "");
 
         if (!/^\d{10}$/.test(tin)) {
+          console.log('[assessmentQuery.flow::handleInput] branch: invalid TIN format');
+          console.log('[assessmentQuery.flow::handleInput] EXIT', { next_step: 1, awaiting_input: 'tin' });
           return {
             message:
               "A TIN must be exactly *10 digits*. Please re-enter your TIN:",
@@ -142,13 +158,18 @@ class AssessmentQueryFlow {
 
         data.tin = tin;
         const queryType = data.query_type as string;
+        console.log('[assessmentQuery.flow::handleInput] branch: valid TIN, queryType=', queryType);
 
         // Determine which service call to make based on query type
         if (queryType === "check_outstanding") {
+          console.log('[assessmentQuery.flow::handleInput] branch: dispatch fetchOutstandingLiabilities');
+          console.log('[assessmentQuery.flow::handleInput] EXIT', { dispatched: 'fetchOutstandingLiabilities' });
           return this.fetchOutstandingLiabilities(phone, tin, data);
         }
 
         // For view_assessment and request_review, fetch all assessments
+        console.log('[assessmentQuery.flow::handleInput] branch: dispatch fetchAssessments');
+        console.log('[assessmentQuery.flow::handleInput] EXIT', { dispatched: 'fetchAssessments' });
         return this.fetchAssessments(phone, tin, data);
       }
 
@@ -156,9 +177,12 @@ class AssessmentQueryFlow {
       // Step 2: Display results and offer dispute / follow-up options
       // ------------------------------------------------------------------
       case 2: {
+        console.log('[assessmentQuery.flow::handleInput] branch: case 2 - post-result action');
         const choice = input.trim().toLowerCase();
 
         if (choice === "done" || choice === "i'm done" || choice === "no" || choice === "exit") {
+          console.log('[assessmentQuery.flow::handleInput] branch: done/exit');
+          console.log('[assessmentQuery.flow::handleInput] EXIT', { flow_complete: true });
           return {
             message:
               "Thank you! If you need to check your assessments again, just say *check my assessment*.\n\n" +
@@ -168,6 +192,7 @@ class AssessmentQueryFlow {
         }
 
         if (choice === "pay" || choice === "make payment" || choice === "pay_now") {
+          console.log('[assessmentQuery.flow::handleInput] branch: pay/make payment');
           const assessments = data.assessments as Array<{
             reference?: string;
             tax_type: string;
@@ -175,7 +200,7 @@ class AssessmentQueryFlow {
           }>;
           const outstanding = assessments?.filter((a) => a.balance > 0) ?? [];
           const total = outstanding.reduce((sum, a) => sum + a.balance, 0);
-
+          console.log('[assessmentQuery.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'payment_action', total });
           return {
             message:
               `Your total outstanding balance is *NGN ${total.toLocaleString()}*.\n\n` +
@@ -197,6 +222,8 @@ class AssessmentQueryFlow {
         }
 
         if (choice === "confirm_payment" || choice === "confirm a payment") {
+          console.log('[assessmentQuery.flow::handleInput] branch: confirm_payment redirect');
+          console.log('[assessmentQuery.flow::handleInput] EXIT', { flow_complete: true });
           return {
             message:
               "I'll redirect you to the Payment Confirmation service.\n\n" +
@@ -206,6 +233,7 @@ class AssessmentQueryFlow {
         }
 
         if (choice === "dispute" || choice === "dispute assessment" || choice === "request_review") {
+          console.log('[assessmentQuery.flow::handleInput] branch: dispute selected');
           const assessments = data.assessments as Array<{
             assessment_id: string;
             reference?: string;
@@ -217,12 +245,13 @@ class AssessmentQueryFlow {
           }>;
 
           if (assessments && assessments.length > 0) {
+            console.log('[assessmentQuery.flow::handleInput] branch: dispute with assessments list');
             const listing = assessments.map((a, i) =>
               `${i + 1}. *${a.tax_type}* (${a.period ?? `Year ${a.tax_year}`}) - NGN ${a.assessed_amount.toLocaleString()} (Ref: ${a.reference ?? "N/A"})`,
             ).join("\n");
 
             data.dispute_options = assessments;
-
+            console.log('[assessmentQuery.flow::handleInput] EXIT', { next_step: 3, awaiting_input: 'dispute_selection' });
             return {
               message:
                 "Which assessment would you like to dispute?\n\n" +
@@ -233,6 +262,8 @@ class AssessmentQueryFlow {
             };
           }
 
+          console.log('[assessmentQuery.flow::handleInput] branch: dispute with free-text description');
+          console.log('[assessmentQuery.flow::handleInput] EXIT', { next_step: 3, awaiting_input: 'dispute_description' });
           return {
             message:
               "Please describe the assessment you wish to dispute.\n\n" +
@@ -244,6 +275,8 @@ class AssessmentQueryFlow {
         }
 
         if (choice === "download" || choice === "download statement") {
+          console.log('[assessmentQuery.flow::handleInput] branch: download statement');
+          console.log('[assessmentQuery.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'post_download_action' });
           return {
             message:
               "Your assessment statement is being generated and will be sent as a PDF in this chat shortly.\n\n" +
@@ -257,6 +290,8 @@ class AssessmentQueryFlow {
           };
         }
 
+        console.log('[assessmentQuery.flow::handleInput] branch: case 2 default - re-prompt');
+        console.log('[assessmentQuery.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'result_action' });
         return {
           message: "Please select an option:",
           buttons: this.getResultActionButtons(data),
@@ -269,6 +304,7 @@ class AssessmentQueryFlow {
       // Step 3: Create ITSM ticket for dispute (ASMT-REV)
       // ------------------------------------------------------------------
       case 3: {
+        console.log('[assessmentQuery.flow::handleInput] branch: case 3 - dispute ticket creation');
         const trimmed = input.trim();
         const tin = (data.tin as string) ?? "N/A";
 
@@ -285,7 +321,9 @@ class AssessmentQueryFlow {
         let disputeDescription: string;
 
         if (disputeOptions && disputeOptions.length > 0 && !data.dispute_description) {
+          console.log('[assessmentQuery.flow::handleInput] branch: dispute option selection');
           if (trimmed.toLowerCase() === "all") {
+            console.log('[assessmentQuery.flow::handleInput] branch: dispute all');
             disputeDescription = disputeOptions.map((a) =>
               `${a.tax_type} (${a.period ?? `Year ${a.tax_year}`}) - Ref: ${a.reference ?? a.assessment_id} - NGN ${a.assessed_amount.toLocaleString()}`,
             ).join("\n");
@@ -294,6 +332,8 @@ class AssessmentQueryFlow {
             const selection = parseInt(trimmed, 10);
 
             if (isNaN(selection) || selection < 1 || selection > disputeOptions.length) {
+              console.log('[assessmentQuery.flow::handleInput] branch: invalid dispute selection');
+              console.log('[assessmentQuery.flow::handleInput] EXIT', { next_step: 3, awaiting_input: 'dispute_selection' });
               return {
                 message:
                   `Please reply with a number between *1* and *${disputeOptions.length}*, or type *all*:`,
@@ -306,10 +346,12 @@ class AssessmentQueryFlow {
             disputeDescription =
               `${selected.tax_type} (${selected.period ?? `Year ${selected.tax_year}`}) - Ref: ${selected.reference ?? selected.assessment_id} - NGN ${selected.assessed_amount.toLocaleString()}`;
             data.disputed_assessments = [selected];
+            console.log('[assessmentQuery.flow::handleInput] branch: dispute single selection', { selection });
           }
 
           // Ask for reason
           data.dispute_description = disputeDescription;
+          console.log('[assessmentQuery.flow::handleInput] EXIT', { next_step: 3, awaiting_input: 'dispute_reason' });
           return {
             message:
               `You selected the following for dispute:\n\n${disputeDescription}\n\n` +
@@ -322,7 +364,10 @@ class AssessmentQueryFlow {
 
         // Collecting the dispute reason (second pass through step 3)
         if (data.dispute_description && !data.dispute_reason) {
+          console.log('[assessmentQuery.flow::handleInput] branch: collecting dispute reason');
           if (trimmed.length < 10) {
+            console.log('[assessmentQuery.flow::handleInput] branch: reason too short');
+            console.log('[assessmentQuery.flow::handleInput] EXIT', { next_step: 3, awaiting_input: 'dispute_reason' });
             return {
               message:
                 "Please provide a more detailed reason for your dispute so we can assist you effectively:",
@@ -333,8 +378,11 @@ class AssessmentQueryFlow {
           data.dispute_reason = trimmed;
           disputeDescription = data.dispute_description as string;
         } else if (!data.dispute_description) {
+          console.log('[assessmentQuery.flow::handleInput] branch: free-text dispute description');
           // Free-text dispute description (no prior selection)
           if (trimmed.length < 10) {
+            console.log('[assessmentQuery.flow::handleInput] branch: description too short');
+            console.log('[assessmentQuery.flow::handleInput] EXIT', { next_step: 3, awaiting_input: 'dispute_description' });
             return {
               message:
                 "Please provide more detail about the assessment you wish to dispute:\n\n" +
@@ -347,6 +395,7 @@ class AssessmentQueryFlow {
           data.dispute_description = trimmed;
           data.dispute_reason = trimmed;
         } else {
+          console.log('[assessmentQuery.flow::handleInput] branch: fallback reason capture');
           disputeDescription = data.dispute_description as string;
           if (!data.dispute_reason) {
             data.dispute_reason = trimmed;
@@ -354,6 +403,7 @@ class AssessmentQueryFlow {
         }
 
         // Create the ITSM ticket
+        console.log('[assessmentQuery.flow::handleInput] branch: creating ASMT-REV ITSM ticket');
         const ticketResult = await itsmService.createTicket({
           type: "ASMT-REV",
           subject: `Assessment Review Request - TIN ${tin}`,
@@ -368,6 +418,8 @@ class AssessmentQueryFlow {
         });
 
         if (!ticketResult.success) {
+          console.log('[assessmentQuery.flow::handleInput] branch: ticket creation failed');
+          console.log('[assessmentQuery.flow::handleInput] EXIT', { flow_complete: true, error: 'ticket creation failed' });
           return {
             message:
               "I'm sorry, there was an issue submitting your dispute request.\n\n" +
@@ -377,6 +429,8 @@ class AssessmentQueryFlow {
           };
         }
 
+        console.log('[assessmentQuery.flow::handleInput] branch: ticket created successfully', { reference: ticketResult.data!.reference });
+        console.log('[assessmentQuery.flow::handleInput] EXIT', { flow_complete: true });
         return {
           message:
             `Your assessment review request has been submitted successfully!\n\n` +
@@ -392,6 +446,8 @@ class AssessmentQueryFlow {
       }
 
       default:
+        console.log('[assessmentQuery.flow::handleInput] branch: default case - unknown step');
+        console.log('[assessmentQuery.flow::handleInput] EXIT', { next_step: 0, awaiting_input: 'query_type' });
         return {
           message:
             "Something went wrong. Let's start the assessment query again.",
@@ -407,9 +463,12 @@ class AssessmentQueryFlow {
     tin: string,
     data: Record<string, unknown>,
   ): Promise<FlowStepResult> {
+    console.log('[assessmentQuery.flow::fetchAssessments] ENTER', { phone, tinPreview: tin.slice(0, 3) + '***' });
     const result = await taxProMaxService.getAssessments(tin);
 
     if (!result.success || !result.data || result.data.length === 0) {
+      console.log('[assessmentQuery.flow::fetchAssessments] branch: no assessments found');
+      console.log('[assessmentQuery.flow::fetchAssessments] EXIT', { next_step: 2, awaiting_input: 'no_assessment_action' });
       return {
         message:
           `No assessments were found for TIN *${tin.slice(0, 3)}****${tin.slice(-2)}*.\n\n` +
@@ -423,6 +482,7 @@ class AssessmentQueryFlow {
       };
     }
 
+    console.log('[assessmentQuery.flow::fetchAssessments] branch: assessments found', { count: result.data.length });
     const assessments = result.data;
     data.assessments = assessments;
 
@@ -445,6 +505,7 @@ class AssessmentQueryFlow {
 
     const buttons = this.getResultActionButtons(data);
 
+    console.log('[assessmentQuery.flow::fetchAssessments] EXIT', { next_step: 2, awaiting_input: 'result_action', totalAssessed, totalBalance });
     return {
       message:
         `*Assessment Summary for TIN ${tin.slice(0, 3)}****${tin.slice(-2)}*\n\n` +
@@ -466,9 +527,12 @@ class AssessmentQueryFlow {
     tin: string,
     data: Record<string, unknown>,
   ): Promise<FlowStepResult> {
+    console.log('[assessmentQuery.flow::fetchOutstandingLiabilities] ENTER', { phone, tinPreview: tin.slice(0, 3) + '***' });
     const result = await taxProMaxService.getOutstandingLiabilities(tin);
 
     if (!result.success || !result.data || result.data.length === 0) {
+      console.log('[assessmentQuery.flow::fetchOutstandingLiabilities] branch: no outstanding liabilities');
+      console.log('[assessmentQuery.flow::fetchOutstandingLiabilities] EXIT', { next_step: 2, awaiting_input: 'no_outstanding_action' });
       return {
         message:
           `Great news! No outstanding liabilities were found for TIN *${tin.slice(0, 3)}****${tin.slice(-2)}*.\n\n` +
@@ -483,6 +547,7 @@ class AssessmentQueryFlow {
       };
     }
 
+    console.log('[assessmentQuery.flow::fetchOutstandingLiabilities] branch: liabilities found', { count: result.data.length });
     const liabilities = result.data;
     data.assessments = liabilities;
 
@@ -496,6 +561,7 @@ class AssessmentQueryFlow {
       );
     }).join("\n\n");
 
+    console.log('[assessmentQuery.flow::fetchOutstandingLiabilities] EXIT', { next_step: 2, awaiting_input: 'outstanding_action', totalOutstanding });
     return {
       message:
         `*Outstanding Liabilities for TIN ${tin.slice(0, 3)}****${tin.slice(-2)}*\n\n` +
@@ -517,6 +583,7 @@ class AssessmentQueryFlow {
   private getResultActionButtons(
     data: Record<string, unknown>,
   ): Array<{ id: string; title: string }> {
+    console.log('[assessmentQuery.flow::getResultActionButtons] ENTER');
     const assessments = data.assessments as Array<{ balance: number }> | undefined;
     const hasOutstanding = assessments?.some((a) => a.balance > 0) ?? false;
     const queryType = data.query_type as string;
@@ -524,16 +591,19 @@ class AssessmentQueryFlow {
     const buttons: Array<{ id: string; title: string }> = [];
 
     if (hasOutstanding) {
+      console.log('[assessmentQuery.flow::getResultActionButtons] branch: hasOutstanding - add pay button');
       buttons.push({ id: "pay", title: "Make Payment" });
     }
 
     if (queryType === "request_review" || hasOutstanding) {
+      console.log('[assessmentQuery.flow::getResultActionButtons] branch: add dispute button');
       buttons.push({ id: "dispute", title: "Dispute Assessment" });
     }
 
     buttons.push({ id: "download", title: "Download Statement" });
     buttons.push({ id: "done", title: "I'm Done" });
 
+    console.log('[assessmentQuery.flow::getResultActionButtons] EXIT', { buttonCount: buttons.length });
     return buttons;
   }
 }

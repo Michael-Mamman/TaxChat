@@ -4,8 +4,21 @@ class ITSMService {
     baseUrl = ITSM_BASE_URL;
     apiKey = ITSM_API_KEY;
     async createTicket(payload) {
+        console.log("[itsm.service::createTicket] ENTER", {
+            type: payload.type,
+            subjectLength: payload.subject?.length,
+            hasTin: !!payload.taxpayer_tin,
+            hasPhone: !!payload.phone,
+            hasEmail: !!payload.email,
+            priority: payload.priority,
+            baseUrl: this.baseUrl,
+        });
         console.log("[ITSM] createTicket stub called:", JSON.stringify(payload));
         const now = new Date().toISOString();
+        console.log("[itsm.service::createTicket] EXIT", {
+            status: 201,
+            type: payload.type,
+        });
         return {
             success: true,
             message: "Ticket created successfully (stub)",
@@ -25,8 +38,13 @@ class ITSMService {
         };
     }
     async getTicketStatus(ticketId) {
+        console.log("[itsm.service::getTicketStatus] ENTER", { ticketId });
         console.log("[ITSM] getTicketStatus stub called:", ticketId);
         const now = new Date().toISOString();
+        console.log("[itsm.service::getTicketStatus] EXIT", {
+            ticketId,
+            status: 200,
+        });
         return {
             success: true,
             message: "Ticket retrieved successfully (stub)",
@@ -46,8 +64,22 @@ class ITSMService {
         };
     }
     async updateTicket(ticketId, updates) {
+        console.log("[itsm.service::updateTicket] ENTER", {
+            ticketId,
+            updateKeys: Object.keys(updates ?? {}),
+        });
         console.log("[ITSM] updateTicket stub called:", ticketId, JSON.stringify(updates));
+        if (updates.status) {
+            console.log("[itsm.service::updateTicket] branch: status update provided");
+        }
+        else {
+            console.log("[itsm.service::updateTicket] branch: default status in_progress");
+        }
         const now = new Date().toISOString();
+        console.log("[itsm.service::updateTicket] EXIT", {
+            ticketId,
+            status: 200,
+        });
         return {
             success: true,
             message: "Ticket updated successfully (stub)",
@@ -68,7 +100,13 @@ class ITSMService {
         };
     }
     async addComment(ticketId, comment, author) {
+        console.log("[itsm.service::addComment] ENTER", {
+            ticketId,
+            commentLength: comment?.length,
+            author,
+        });
         console.log("[ITSM] addComment stub called:", ticketId, comment, author);
+        console.log("[itsm.service::addComment] EXIT", { ticketId, status: 200 });
         return {
             success: true,
             message: `Comment added to ticket ${ticketId} by ${author} (stub)`,
@@ -76,7 +114,12 @@ class ITSMService {
         };
     }
     async escalateTicket(ticketId, reason) {
+        console.log("[itsm.service::escalateTicket] ENTER", {
+            ticketId,
+            reasonLength: reason?.length,
+        });
         console.log("[ITSM] escalateTicket stub called:", ticketId, reason);
+        console.log("[itsm.service::escalateTicket] EXIT", { ticketId, status: 200 });
         return {
             success: true,
             message: `Ticket ${ticketId} escalated successfully (stub)`,

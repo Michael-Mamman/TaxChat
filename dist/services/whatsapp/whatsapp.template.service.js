@@ -5,7 +5,8 @@ import whatsappService from "./whatsapp.service.js";
  */
 class WhatsAppTemplateService {
     async sendServiceRequestUpdate(phone, reference, status, nextAction) {
-        return whatsappService.sendTemplateMessage(phone, "service_request_update", "en", [
+        console.log("[whatsapp.template.service::sendServiceRequestUpdate] ENTER", { phone: phone ? `${phone.slice(0, 4)}***` : null, reference, status });
+        const result = await whatsappService.sendTemplateMessage(phone, "service_request_update", "en", [
             {
                 type: "body",
                 parameters: [
@@ -15,9 +16,12 @@ class WhatsAppTemplateService {
                 ],
             },
         ]);
+        console.log("[whatsapp.template.service::sendServiceRequestUpdate] EXIT", { hasMessageId: !!result });
+        return result;
     }
     async sendTINIssuedNotification(phone, maskedTIN) {
-        return whatsappService.sendTemplateMessage(phone, "tin_issued", "en", [
+        console.log("[whatsapp.template.service::sendTINIssuedNotification] ENTER", { phone: phone ? `${phone.slice(0, 4)}***` : null, hasTIN: !!maskedTIN });
+        const result = await whatsappService.sendTemplateMessage(phone, "tin_issued", "en", [
             {
                 type: "body",
                 parameters: [
@@ -25,9 +29,12 @@ class WhatsAppTemplateService {
                 ],
             },
         ]);
+        console.log("[whatsapp.template.service::sendTINIssuedNotification] EXIT", { hasMessageId: !!result });
+        return result;
     }
     async sendTCCReadyNotification(phone, tccReference, validityPeriod, verificationUrl) {
-        return whatsappService.sendTemplateMessage(phone, "tcc_ready", "en", [
+        console.log("[whatsapp.template.service::sendTCCReadyNotification] ENTER", { phone: phone ? `${phone.slice(0, 4)}***` : null, tccReference, validityPeriod });
+        const result = await whatsappService.sendTemplateMessage(phone, "tcc_ready", "en", [
             {
                 type: "body",
                 parameters: [
@@ -37,9 +44,12 @@ class WhatsAppTemplateService {
                 ],
             },
         ]);
+        console.log("[whatsapp.template.service::sendTCCReadyNotification] EXIT", { hasMessageId: !!result });
+        return result;
     }
     async sendPaymentPostedNotification(phone, amount, taxType, period) {
-        return whatsappService.sendTemplateMessage(phone, "payment_posted", "en", [
+        console.log("[whatsapp.template.service::sendPaymentPostedNotification] ENTER", { phone: phone ? `${phone.slice(0, 4)}***` : null, amount, taxType, period });
+        const result = await whatsappService.sendTemplateMessage(phone, "payment_posted", "en", [
             {
                 type: "body",
                 parameters: [
@@ -49,9 +59,12 @@ class WhatsAppTemplateService {
                 ],
             },
         ]);
+        console.log("[whatsapp.template.service::sendPaymentPostedNotification] EXIT", { hasMessageId: !!result });
+        return result;
     }
     async sendFilingDeadlineReminder(phone, taxType, period, deadline) {
-        return whatsappService.sendTemplateMessage(phone, "filing_deadline_reminder", "en", [
+        console.log("[whatsapp.template.service::sendFilingDeadlineReminder] ENTER", { phone: phone ? `${phone.slice(0, 4)}***` : null, taxType, period, deadline });
+        const result = await whatsappService.sendTemplateMessage(phone, "filing_deadline_reminder", "en", [
             {
                 type: "body",
                 parameters: [
@@ -61,6 +74,8 @@ class WhatsAppTemplateService {
                 ],
             },
         ]);
+        console.log("[whatsapp.template.service::sendFilingDeadlineReminder] EXIT", { hasMessageId: !!result });
+        return result;
     }
 }
 export default new WhatsAppTemplateService();

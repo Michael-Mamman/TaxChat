@@ -11,14 +11,21 @@ import akraaAI from "../integrations/akraa-ai.service.js";
  */
 class GeneralEnquiryFlow {
     async start(phone, entities) {
+        console.log('[generalEnquiry.flow::start] ENTER', { phone, entityKeys: entities ? Object.keys(entities) : [] });
         // If a question was already captured from the initial message
         if (entities?.question) {
+            console.log('[generalEnquiry.flow::start] branch: entities.question provided');
+            console.log('[generalEnquiry.flow::start] EXIT', { dispatched: 'processQuestion' });
             return this.processQuestion(phone, entities.question, {});
         }
         // If NLU extracted a topic or intent, use it as a starting point
         if (entities?.topic) {
+            console.log('[generalEnquiry.flow::start] branch: entities.topic provided');
+            console.log('[generalEnquiry.flow::start] EXIT', { dispatched: 'processQuestion(topic)' });
             return this.processQuestion(phone, entities.topic, {});
         }
+        console.log('[generalEnquiry.flow::start] branch: default - ask open question');
+        console.log('[generalEnquiry.flow::start] EXIT', { next_step: 0, awaiting_input: 'question' });
         return {
             message: "I'm here to help with your tax questions.\n\n" +
                 "You can ask me about:\n" +
@@ -35,13 +42,17 @@ class GeneralEnquiryFlow {
         };
     }
     async handleInput(phone, input, step, data) {
+        console.log('[generalEnquiry.flow::handleInput] ENTER', { phone, step, inputLen: input.length });
         switch (step) {
             // ------------------------------------------------------------------
             // Step 0: Receive and process the question
             // ------------------------------------------------------------------
             case 0: {
+                console.log('[generalEnquiry.flow::handleInput] branch: case 0 - receive question');
                 const question = input.trim();
                 if (question.length < 5) {
+                    console.log('[generalEnquiry.flow::handleInput] branch: question too short');
+                    console.log('[generalEnquiry.flow::handleInput] EXIT', { next_step: 0, awaiting_input: 'question' });
                     return {
                         message: "Could you provide more detail about your question? " +
                             "The more specific you are, the better I can help.\n\n" +
@@ -50,14 +61,18 @@ class GeneralEnquiryFlow {
                         awaiting_input: "question",
                     };
                 }
+                console.log('[generalEnquiry.flow::handleInput] EXIT', { dispatched: 'processQuestion' });
                 return this.processQuestion(phone, question, data);
             }
             // ------------------------------------------------------------------
             // Step 1: Display AI response and handle follow-up
             // ------------------------------------------------------------------
             case 1: {
+                console.log('[generalEnquiry.flow::handleInput] branch: case 1 - AI response follow-up');
                 const choice = input.trim().toLowerCase();
                 if (choice === "yes" || choice === "helpful" || choice === "thanks" || choice === "done") {
+                    console.log('[generalEnquiry.flow::handleInput] branch: positive feedback');
+                    console.log('[generalEnquiry.flow::handleInput] EXIT', { flow_complete: true });
                     return {
                         message: "Glad I could help! If you have another question, just ask.\n\n" +
                             "Type *menu* to see other services.",
@@ -65,6 +80,8 @@ class GeneralEnquiryFlow {
                     };
                 }
                 if (choice === "no" || choice === "not helpful" || choice === "wrong") {
+                    console.log('[generalEnquiry.flow::handleInput] branch: negative feedback');
+                    console.log('[generalEnquiry.flow::handleInput] EXIT', { next_step: 1, awaiting_input: 'dissatisfied_action' });
                     return {
                         message: "I'm sorry the answer wasn't helpful. Would you like me to:\n\n" +
                             "1. *Rephrase* - Try answering differently\n" +
@@ -80,11 +97,15 @@ class GeneralEnquiryFlow {
                     };
                 }
                 if (choice === "rephrase" || choice === "rephrase answer") {
+                    console.log('[generalEnquiry.flow::handleInput] branch: rephrase requested');
                     const lastQuestion = data.last_question;
                     if (lastQuestion) {
                         data.rephrase_attempt = (data.rephrase_attempt ?? 0) + 1;
+                        console.log('[generalEnquiry.flow::handleInput] EXIT', { dispatched: 'processQuestion(rephrase)' });
                         return this.processQuestion(phone, lastQuestion, data);
                     }
+                    console.log('[generalEnquiry.flow::handleInput] branch: rephrase without last question');
+                    console.log('[generalEnquiry.flow::handleInput] EXIT', { next_step: 0, awaiting_input: 'question' });
                     return {
                         message: "Please ask your question again and I'll try a different approach:",
                         next_step: 0,
@@ -92,6 +113,8 @@ class GeneralEnquiryFlow {
                     };
                 }
                 if (choice === "escalate" || choice === "speak to officer") {
+                    console.log('[generalEnquiry.flow::handleInput] branch: escalate to officer');
+                    console.log('[generalEnquiry.flow::handleInput] EXIT', { escalate: true, flow_complete: true });
                     return {
                         message: "I'll connect you with a tax officer who can provide more detailed guidance.\n\n" +
                             "Your question has been forwarded for review. An officer will respond shortly.\n\n" +
@@ -102,6 +125,8 @@ class GeneralEnquiryFlow {
                     };
                 }
                 if (choice === "new_question" || choice === "ask another question" || choice === "another question") {
+                    console.log('[generalEnquiry.flow::handleInput] branch: new question');
+                    console.log('[generalEnquiry.flow::handleInput] EXIT', { next_step: 0, awaiting_input: 'question' });
                     return {
                         message: "Sure! What else would you like to know?",
                         next_step: 0,
@@ -110,12 +135,16 @@ class GeneralEnquiryFlow {
                 }
                 // Treat any other sufficiently long input as a follow-up question
                 if (input.trim().length > 5) {
+                    console.log('[generalEnquiry.flow::handleInput] branch: treating input as follow-up question');
                     data.conversation_history = [
                         ...(data.conversation_history ?? []),
                         data.last_question,
                     ];
+                    console.log('[generalEnquiry.flow::handleInput] EXIT', { dispatched: 'processQuestion(followup)' });
                     return this.processQuestion(phone, input.trim(), data);
                 }
+                console.log('[generalEnquiry.flow::handleInput] branch: case 1 default feedback re-prompt');
+                console.log('[generalEnquiry.flow::handleInput] EXIT', { next_step: 1, awaiting_input: 'feedback' });
                 return {
                     message: "Was this answer helpful?",
                     buttons: [
@@ -131,8 +160,11 @@ class GeneralEnquiryFlow {
             // Step 2: Handle low-confidence responses and offer escalation
             // ------------------------------------------------------------------
             case 2: {
+                console.log('[generalEnquiry.flow::handleInput] branch: case 2 - low-confidence/escalation choice');
                 const choice = input.trim().toLowerCase();
                 if (choice === "escalate" || choice === "yes" || choice === "speak to officer") {
+                    console.log('[generalEnquiry.flow::handleInput] branch: escalate (low confidence)');
+                    console.log('[generalEnquiry.flow::handleInput] EXIT', { escalate: true, flow_complete: true });
                     return {
                         message: "I'll connect you with a tax officer for a more detailed response.\n\n" +
                             "Your question has been queued for review. An officer will respond shortly.\n\n" +
@@ -143,6 +175,8 @@ class GeneralEnquiryFlow {
                     };
                 }
                 if (choice === "no" || choice === "done" || choice === "accept" || choice === "this is enough") {
+                    console.log('[generalEnquiry.flow::handleInput] branch: user accepts / done');
+                    console.log('[generalEnquiry.flow::handleInput] EXIT', { flow_complete: true });
                     return {
                         message: "Alright! If you need more help later, just ask.\n\n" +
                             "Type *menu* to see other services.",
@@ -150,6 +184,8 @@ class GeneralEnquiryFlow {
                     };
                 }
                 if (choice === "rephrase" || choice === "try again") {
+                    console.log('[generalEnquiry.flow::handleInput] branch: rephrase/try again');
+                    console.log('[generalEnquiry.flow::handleInput] EXIT', { next_step: 0, awaiting_input: 'question' });
                     return {
                         message: "Let me try to answer your question differently. Could you provide more context or rephrase your question?",
                         next_step: 0,
@@ -157,6 +193,8 @@ class GeneralEnquiryFlow {
                     };
                 }
                 if (choice === "new_question" || choice === "ask another question") {
+                    console.log('[generalEnquiry.flow::handleInput] branch: new question requested');
+                    console.log('[generalEnquiry.flow::handleInput] EXIT', { next_step: 0, awaiting_input: 'question' });
                     return {
                         message: "Sure! What else would you like to know?",
                         next_step: 0,
@@ -165,8 +203,12 @@ class GeneralEnquiryFlow {
                 }
                 // Treat as a new question if long enough
                 if (input.trim().length > 5) {
+                    console.log('[generalEnquiry.flow::handleInput] branch: treating input as new question');
+                    console.log('[generalEnquiry.flow::handleInput] EXIT', { dispatched: 'processQuestion(new)' });
                     return this.processQuestion(phone, input.trim(), data);
                 }
+                console.log('[generalEnquiry.flow::handleInput] branch: case 2 default re-prompt');
+                console.log('[generalEnquiry.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'escalation_choice' });
                 return {
                     message: "Would you like to speak with a tax officer for a more detailed answer?",
                     buttons: [
@@ -179,6 +221,8 @@ class GeneralEnquiryFlow {
                 };
             }
             default:
+                console.log('[generalEnquiry.flow::handleInput] branch: default case - unknown step');
+                console.log('[generalEnquiry.flow::handleInput] EXIT', { next_step: 0, awaiting_input: 'question' });
                 return {
                     message: "Something went wrong. Please ask your question again:",
                     next_step: 0,
@@ -188,15 +232,19 @@ class GeneralEnquiryFlow {
     }
     /** Process a question through Akraa AI and return a response */
     async processQuestion(phone, question, data) {
+        console.log('[generalEnquiry.flow::processQuestion] ENTER', { phone, questionLen: question.length, rephrase_attempt: data.rephrase_attempt });
         data.last_question = question;
         try {
             // First classify the intent to understand context
+            console.log('[generalEnquiry.flow::processQuestion] branch: classifying intent');
             const classifyResult = await akraaAI.classifyIntent(question, {
                 phone,
                 conversation_history: data.conversation_history ?? [],
                 rephrase_attempt: data.rephrase_attempt ?? 0,
             });
             if (!classifyResult.success || !classifyResult.data) {
+                console.log('[generalEnquiry.flow::processQuestion] branch: classification failed');
+                console.log('[generalEnquiry.flow::processQuestion] EXIT', { next_step: 2, awaiting_input: 'error_action' });
                 return {
                     message: "I'm having trouble understanding your question right now.\n\n" +
                         "Would you like to try again or speak with a tax officer?",
@@ -210,6 +258,7 @@ class GeneralEnquiryFlow {
             }
             const classification = classifyResult.data;
             const confidence = classification.confidence;
+            console.log('[generalEnquiry.flow::processQuestion] branch: classified', { intent: classification.intent, confidence });
             // If the AI classified this as a specific flow, suggest redirecting
             const specificFlows = [
                 "tin_registration",
@@ -223,6 +272,7 @@ class GeneralEnquiryFlow {
                 "profile_update",
             ];
             if (specificFlows.includes(classification.intent) && confidence > 0.85) {
+                console.log('[generalEnquiry.flow::processQuestion] branch: suggest redirect to specific flow');
                 const flowLabels = {
                     tin_registration: "TIN Registration",
                     tin_retrieval: "TIN Retrieval",
@@ -234,6 +284,7 @@ class GeneralEnquiryFlow {
                     wht_credit_note: "WHT Credit Note",
                     profile_update: "Profile Update",
                 };
+                console.log('[generalEnquiry.flow::processQuestion] EXIT', { next_step: 1, awaiting_input: 'redirect_or_answer' });
                 return {
                     message: `It sounds like you need help with *${flowLabels[classification.intent] ?? classification.intent}*.\n\n` +
                         "I have a dedicated service for this that can provide step-by-step assistance.\n\n" +
@@ -247,6 +298,7 @@ class GeneralEnquiryFlow {
                 };
             }
             // Generate a response using AI
+            console.log('[generalEnquiry.flow::processQuestion] branch: generating response');
             const responseResult = await akraaAI.generateResponse(classification.intent, {
                 question,
                 entities: classification.entities,
@@ -254,6 +306,8 @@ class GeneralEnquiryFlow {
                 rephrase: data.rephrase_attempt ?? 0 > 0,
             });
             if (!responseResult.success) {
+                console.log('[generalEnquiry.flow::processQuestion] branch: response generation failed');
+                console.log('[generalEnquiry.flow::processQuestion] EXIT', { next_step: 2, awaiting_input: 'escalation_choice' });
                 return {
                     message: "I understand your question is about " +
                         `*${classification.intent.replace(/_/g, " ")}*, ` +
@@ -271,6 +325,8 @@ class GeneralEnquiryFlow {
             const answerText = responseResult.message;
             // Low confidence -- provide answer but suggest escalation
             if (confidence < 0.6) {
+                console.log('[generalEnquiry.flow::processQuestion] branch: low confidence', { confidence });
+                console.log('[generalEnquiry.flow::processQuestion] EXIT', { next_step: 2, awaiting_input: 'low_confidence_action' });
                 return {
                     message: `Here's what I found, though I'm not fully confident in this answer:\n\n` +
                         `${answerText}\n\n` +
@@ -286,6 +342,8 @@ class GeneralEnquiryFlow {
                     awaiting_input: "low_confidence_action",
                 };
             }
+            console.log('[generalEnquiry.flow::processQuestion] branch: high confidence answer', { confidence });
+            console.log('[generalEnquiry.flow::processQuestion] EXIT', { next_step: 1, awaiting_input: 'feedback' });
             // High confidence -- provide answer directly
             return {
                 message: `${answerText}\n\n` +
@@ -300,6 +358,8 @@ class GeneralEnquiryFlow {
             };
         }
         catch {
+            console.log('[generalEnquiry.flow::processQuestion] branch: catch block - error occurred');
+            console.log('[generalEnquiry.flow::processQuestion] EXIT', { next_step: 2, awaiting_input: 'error_action', error: 'exception thrown' });
             return {
                 message: "I'm sorry, I encountered an error processing your question.\n\n" +
                     "Would you like to try again or speak with a tax officer?",
