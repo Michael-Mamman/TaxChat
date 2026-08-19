@@ -26,11 +26,15 @@ class EscalationService {
       await ConversationContext.findOneAndUpdate(
         { phone },
         {
-          is_escalated: true,
-          escalated_to: ticket.data?.assigned_to,
-          escalation_ticket_id: ticket.data?.ticket_id,
-          current_flow: undefined,
-          awaiting_input: undefined,
+          // $unset, not `undefined`: Mongoose drops undefined values from
+          // update documents, which would leave the flow running underneath
+          // the escalated conversation.
+          $set: {
+            is_escalated: true,
+            escalated_to: ticket.data?.assigned_to,
+            escalation_ticket_id: ticket.data?.ticket_id,
+          },
+          $unset: { current_flow: 1, current_step: 1, awaiting_input: 1 },
         },
         { upsert: true },
       );
@@ -96,9 +100,8 @@ class EscalationService {
     await ConversationContext.findOneAndUpdate(
       { phone },
       {
-        is_escalated: false,
-        escalated_to: undefined,
-        escalation_ticket_id: undefined,
+        $set: { is_escalated: false },
+        $unset: { escalated_to: 1, escalation_ticket_id: 1 },
       },
     );
     console.log('[escalation.service::returnFromEscalation] branch: context cleared');

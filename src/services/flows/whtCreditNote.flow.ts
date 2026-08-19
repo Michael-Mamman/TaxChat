@@ -273,8 +273,10 @@ class WHTCreditNoteFlow {
 
         if (choice === "edit" || choice === "edit details") {
           console.log('[whtCreditNote.flow::handleInput] branch: edit');
-          data.credit_period = undefined;
-          data.taxpayer_tin = undefined;
+          // delete, not `= undefined`: flow_data is persisted wholesale, and an
+          // undefined property would be written to Mongo as null.
+          delete data.credit_period;
+          delete data.taxpayer_tin;
           console.log('[whtCreditNote.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'credit_details' });
           return {
             message:
