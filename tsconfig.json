@@ -21,6 +21,7 @@
   },
   "exclude": [
     "src/**/*.js",
+    "scripts",
     "dist",
     "node_modules"
   ]
