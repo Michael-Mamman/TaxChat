@@ -22,6 +22,8 @@
   "exclude": [
     "src/**/*.js",
     "scripts",
+    "tests",
+    "vitest.config.ts",
     "dist",
     "node_modules"
   ]
