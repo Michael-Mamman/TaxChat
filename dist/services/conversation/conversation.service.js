@@ -8,7 +8,21 @@ import menuService from "./menu.service.js";
 import whatsappService from "../whatsapp/whatsapp.service.js";
 import escalationService from "../escalation/escalation.service.js";
 import auditLogService from "../auditLog.service.js";
-import { ESCALATION_KEYWORDS, MENU_KEYWORDS, GREETING_KEYWORDS, MAIN_MENU_OPTIONS, } from "../../utils/constants.js";
+import { ESCALATION_KEYWORDS, ESCALATION_PHRASES, MENU_KEYWORDS, GREETING_KEYWORDS, MAIN_MENU_OPTIONS, } from "../../utils/constants.js";
+/** Strips surrounding punctuation so "help!" and "agent." still match exactly. */
+function normalizeForKeywords(text) {
+    return text.toLowerCase().trim().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+}
+/** True when the taxpayer is asking for a human, not merely using the word. */
+function isEscalationRequest(normalizedText) {
+    if (ESCALATION_KEYWORDS.includes(normalizedText))
+        return true;
+    return ESCALATION_PHRASES.some((phrase) => normalizedText.includes(phrase));
+}
+/** True when the message opens with a greeting as a whole word. */
+function isGreeting(normalizedText) {
+    return GREETING_KEYWORDS.some((kw) => normalizedText === kw || normalizedText.startsWith(kw + " "));
+}
 class ConversationService {
     async handleIncomingMessage(context) {
         console.log("[conversation.service::handleIncomingMessage] ENTER", { from: context.from ? `${context.from.slice(0, 4)}***` : null, messageType: context.messageType, textPreview: context.text?.slice(0, 40) });
@@ -28,32 +42,37 @@ class ConversationService {
             text,
             type: messageType,
         });
-        // Check for escalation keywords
-        if (ESCALATION_KEYWORDS.some((kw) => normalizedText.includes(kw))) {
-            console.log("[conversation.service::handleIncomingMessage] branch: escalation keyword matched");
-            await escalationService.escalateToAgent(from, "User requested live agent");
-            console.log("[conversation.service::handleIncomingMessage] EXIT", { reason: "escalated" });
-            return;
-        }
-        // If escalated, forward to agent
+        // If already escalated, everything the taxpayer sends goes to the officer.
         if (convo?.is_escalated) {
             console.log("[conversation.service::handleIncomingMessage] branch: already escalated, forwarding");
             await escalationService.forwardToAgent(from, text);
             console.log("[conversation.service::handleIncomingMessage] EXIT", { reason: "forwarded-to-agent" });
             return;
         }
-        // Check for menu keywords
-        if (MENU_KEYWORDS.some((kw) => normalizedText === kw)) {
-            console.log("[conversation.service::handleIncomingMessage] branch: menu keyword matched");
-            await this.resetAndShowMenu(from, contactName);
-            console.log("[conversation.service::handleIncomingMessage] EXIT", { reason: "reset-menu" });
-            return;
-        }
-        // Handle interactive responses (list/button selections)
+        // Interactive replies are handled before any keyword matching. For these,
+        // `text` is the reply's internal id (e.g. "by_agent_tin"), not something the
+        // taxpayer wrote - matching keywords against an id escalates or resets the
+        // conversation on ids that merely happen to contain "agent" or equal "back".
         if (messageType === "interactive" && interactiveResponse) {
             console.log("[conversation.service::handleIncomingMessage] branch: interactive response");
             await this.handleInteractiveResponse(from, interactiveResponse, convo);
             console.log("[conversation.service::handleIncomingMessage] EXIT", { reason: "interactive-handled" });
+            return;
+        }
+        // Everything below this point is free text the taxpayer typed.
+        const keywordText = normalizeForKeywords(text);
+        // Check for an escalation request
+        if (isEscalationRequest(keywordText)) {
+            console.log("[conversation.service::handleIncomingMessage] branch: escalation requested");
+            await escalationService.escalateToAgent(from, "User requested live agent");
+            console.log("[conversation.service::handleIncomingMessage] EXIT", { reason: "escalated" });
+            return;
+        }
+        // Check for menu keywords
+        if (MENU_KEYWORDS.some((kw) => keywordText === kw)) {
+            console.log("[conversation.service::handleIncomingMessage] branch: menu keyword matched");
+            await this.resetAndShowMenu(from, contactName);
+            console.log("[conversation.service::handleIncomingMessage] EXIT", { reason: "reset-menu" });
             return;
         }
         // If user is in an active flow and awaiting input, continue flow
@@ -69,7 +88,7 @@ class ConversationService {
             return;
         }
         // Check for greetings
-        if (GREETING_KEYWORDS.some((kw) => normalizedText.startsWith(kw))) {
+        if (isGreeting(keywordText)) {
             console.log("[conversation.service::handleIncomingMessage] branch: greeting detected");
             await this.sendWelcome(from, contactName);
             console.log("[conversation.service::handleIncomingMessage] EXIT", { reason: "greeting-welcomed" });
@@ -114,12 +133,17 @@ class ConversationService {
     async resetAndShowMenu(phone, contactName) {
         console.log("[conversation.service::resetAndShowMenu] ENTER", { phone: phone ? `${phone.slice(0, 4)}***` : null });
         // Clear conversation state
+        // Mongoose strips `undefined` out of update documents, so these fields must
+        // be $unset - assigning undefined leaves the old values in place and the
+        // taxpayer stays trapped in the flow they were trying to leave.
         await ConversationContext.findOneAndUpdate({ phone }, {
-            current_flow: undefined,
-            current_step: undefined,
-            flow_data: {},
-            awaiting_input: undefined,
-            pending_auth_flow: undefined,
+            $set: { flow_data: {}, last_message_at: new Date() },
+            $unset: {
+                current_flow: 1,
+                current_step: 1,
+                awaiting_input: 1,
+                pending_auth_flow: 1,
+            },
         }, { upsert: true });
         console.log("[conversation.service::resetAndShowMenu] state cleared");
         await menuService.sendMainMenu(phone);
@@ -138,6 +162,10 @@ class ConversationService {
         }
         // Check if selection is a main menu flow
         const isMainMenuOption = MAIN_MENU_OPTIONS.some((opt) => opt.id === selectedId);
+        // A main-menu id takes precedence even mid-flow: tapping a service from the
+        // main menu is an explicit request to switch to it. This is safe only while
+        // no flow emits a reply id equal to a main-menu id - none do today, and any
+        // new flow must keep it that way or it will silently restart itself.
         if (isMainMenuOption) {
             console.log("[conversation.service::handleInteractiveResponse] branch: main menu option selected", { selectedId });
             await flowRouter.startFlow(phone, selectedId);

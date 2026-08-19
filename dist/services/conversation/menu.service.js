@@ -1,5 +1,6 @@
 import whatsappService from "../whatsapp/whatsapp.service.js";
 import { MAIN_MENU_OPTIONS } from "../../utils/constants.js";
+import { WA, toRow } from "../whatsapp/whatsapp.limits.js";
 class MenuService {
     getMainMenuOptions() {
         console.log("[menu.service::getMainMenuOptions] ENTER");
@@ -19,15 +20,7 @@ class MenuService {
     }
     async sendSubMenu(phone, headerText, bodyText, options) {
         console.log("[menu.service::sendSubMenu] ENTER", { phone: phone ? `${phone.slice(0, 4)}***` : null, headerText, optionsCount: options?.length });
-        const rows = options.map((opt) => {
-            const row = {
-                id: opt.id,
-                title: opt.title.slice(0, 24),
-            };
-            if (opt.description)
-                row.description = opt.description.slice(0, 72);
-            return row;
-        });
+        const rows = options.slice(0, WA.LIST_ROWS_MAX).map(toRow);
         await whatsappService.sendInteractiveListMessage(phone, headerText, bodyText, "NRS TaxChat", [{ title: "Options", rows }]);
         console.log("[menu.service::sendSubMenu] EXIT");
     }
