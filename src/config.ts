@@ -65,6 +65,20 @@ export const CIN_API_KEY = process.env.CIN_API_KEY || "";
 export const EMAIL_SERVICE_URL = process.env.EMAIL_SERVICE_URL || "";
 
 // === Auth ===
+/**
+ * Where a one-time passcode is delivered.
+ *
+ * "sms" is the production channel (BRD FR-2.2). "whatsapp" delivers the code
+ * over the same chat, which is the only option while no SMS gateway exists -
+ * it is a demo affordance, not a production setting, because a passcode sent
+ * over the channel it authenticates is not a second factor. Anything else, or
+ * an unset SMS gateway with no explicit fallback, means OTP cannot be
+ * delivered and the taxpayer is told so rather than left waiting.
+ */
+export const OTP_DELIVERY_CHANNEL = (process.env.OTP_DELIVERY_CHANNEL || "sms") as
+  | "sms"
+  | "whatsapp";
+
 export const OTP_EXPIRY_SECONDS = Number(process.env.OTP_EXPIRY_SECONDS) || 300;
 export const SESSION_TIMEOUT_SECONDS =
   Number(process.env.SESSION_TIMEOUT_SECONDS) || 900;

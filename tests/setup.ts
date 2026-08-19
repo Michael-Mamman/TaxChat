@@ -20,6 +20,10 @@ process.env.WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN ?? "test-token";
 process.env.VERIFY_TOKEN = process.env.VERIFY_TOKEN ?? "test-verify-token";
 // Keep the Anthropic SDK from being constructed with a real key during tests.
 process.env.AKRAA_AI_API_KEY = "test-key-not-used";
+// Mirror the demo configuration: no SMS gateway exists, so codes are delivered
+// over WhatsApp. Without this, auth correctly refuses and no tier-gated flow
+// can be reached.
+process.env.OTP_DELIVERY_CHANNEL = "whatsapp";
 
 vi.mock("axios", async () => {
   const { recordOutbound } = await import("./helpers/outbound.js");
