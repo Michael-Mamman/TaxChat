@@ -71,6 +71,24 @@ export const ESCALATION_PHRASES = [
 /** Keyword that returns to main menu */
 export const MENU_KEYWORDS = ["menu", "start", "home", "back"];
 /**
+ * Words that end a live-agent handover and return the taxpayer to self-service.
+ *
+ * Escalation has no other exit: no officer workbench is connected, so nothing
+ * calls returnFromEscalation on its own. Without these the taxpayer is stuck
+ * talking to a queue that will never answer, and the number stays unusable.
+ */
+export const END_ESCALATION_KEYWORDS = [
+    "menu",
+    "exit",
+    "cancel",
+    "stop",
+    "end",
+    "end chat",
+    "back",
+    "home",
+    "self service",
+];
+/**
  * Greeting keywords. Matched as a whole word at the start of the message, so
  * "hi there" greets but "history" does not.
  */
