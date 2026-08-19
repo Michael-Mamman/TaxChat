@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { PHONE_NUMBER_ID, WHATSAPP_TOKEN } from "../../config.js";
 import type { MenuOption } from "../../types/conversation.types.js";
+import { WA, clamp, splitInteractiveBody, toRow } from "./whatsapp.limits.js";
 
 class WhatsAppService {
   private apiUrl = `https://graph.facebook.com/v22.0/${PHONE_NUMBER_ID}/messages`;
@@ -99,9 +100,9 @@ class WhatsAppService {
             type: "button",
             body: { text: bodyText },
             action: {
-              buttons: buttons.slice(0, 3).map((b) => ({
+              buttons: buttons.slice(0, WA.REPLY_BUTTONS_MAX).map((b) => ({
                 type: "reply",
-                reply: { id: b.id, title: b.title },
+                reply: { id: b.id, title: clamp(b.title, WA.BUTTON_TITLE_MAX) },
               })),
             },
           },
@@ -123,16 +124,57 @@ class WhatsAppService {
     }
   }
 
+  /**
+   * Present a set of choices, picking the interactive type that can actually
+   * hold them.
+   *
+   * WhatsApp allows at most 3 reply buttons with 20-character titles. Flows
+   * routinely produce 4 options - taxClearance offers one action per compliance
+   * gap plus "Speak to an Officer" - and blindly slicing to 3 drops the last
+   * one, which is the escape hatch, for exactly the taxpayer who most needs it.
+   * Rendering as a list instead keeps every option.
+   */
+  async sendChoice(
+    to: string,
+    bodyText: string,
+    options: Array<{ id: string; title: string; description?: string }>,
+  ): Promise<void> {
+    console.log('[whatsapp.service::sendChoice] ENTER', { to: to ? `${to.slice(0, 4)}***` : null, optionCount: options.length, bodyLength: bodyText?.length });
+    const { preamble, body } = splitInteractiveBody(bodyText);
+    if (preamble) {
+      console.log('[whatsapp.service::sendChoice] branch: body over interactive limit - sending preamble');
+      await this.sendMessage(to, preamble);
+    }
+
+    const needsList =
+      options.length > WA.REPLY_BUTTONS_MAX ||
+      options.some((o) => o.title.length > WA.BUTTON_TITLE_MAX) ||
+      options.some((o) => !!o.description);
+
+    if (needsList) {
+      if (options.length > WA.LIST_ROWS_MAX) {
+        console.warn('[whatsapp.service::sendChoice] truncating rows to WhatsApp limit', { count: options.length, kept: WA.LIST_ROWS_MAX });
+      }
+      console.log('[whatsapp.service::sendChoice] branch: rendering as list', { rows: Math.min(options.length, WA.LIST_ROWS_MAX) });
+      await this.sendInteractiveListMessage(
+        to,
+        "NRS TaxChat",
+        body,
+        "Official NRS Virtual Tax Office",
+        [{ title: "Options", rows: options.slice(0, WA.LIST_ROWS_MAX).map(toRow) }],
+      );
+      console.log('[whatsapp.service::sendChoice] EXIT', { rendered: 'list' });
+      return;
+    }
+
+    console.log('[whatsapp.service::sendChoice] branch: rendering as buttons', { count: options.length });
+    await this.sendInteractiveButtonMessage(to, body, options);
+    console.log('[whatsapp.service::sendChoice] EXIT', { rendered: 'buttons' });
+  }
+
   async sendMainMenu(to: string, options: MenuOption[]): Promise<void> {
     console.log("[whatsapp.service::sendMainMenu] ENTER", { to: to ? `${to.slice(0, 4)}***` : null, optionsCount: options?.length });
-    const rows = options.map((opt) => {
-      const row: { id: string; title: string; description?: string } = {
-        id: opt.id,
-        title: opt.title.slice(0, 24),
-      };
-      if (opt.description) row.description = opt.description.slice(0, 72);
-      return row;
-    });
+    const rows = options.slice(0, WA.LIST_ROWS_MAX).map(toRow);
 
     await this.sendInteractiveListMessage(
       to,

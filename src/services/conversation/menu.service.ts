@@ -1,6 +1,7 @@
 import whatsappService from "../whatsapp/whatsapp.service.js";
 import type { MenuOption } from "../../types/conversation.types.js";
 import { MAIN_MENU_OPTIONS } from "../../utils/constants.js";
+import { WA, toRow } from "../whatsapp/whatsapp.limits.js";
 
 class MenuService {
   getMainMenuOptions(): MenuOption[] {
@@ -28,14 +29,7 @@ class MenuService {
     options: MenuOption[],
   ): Promise<void> {
     console.log("[menu.service::sendSubMenu] ENTER", { phone: phone ? `${phone.slice(0, 4)}***` : null, headerText, optionsCount: options?.length });
-    const rows = options.map((opt) => {
-      const row: { id: string; title: string; description?: string } = {
-        id: opt.id,
-        title: opt.title.slice(0, 24),
-      };
-      if (opt.description) row.description = opt.description.slice(0, 72);
-      return row;
-    });
+    const rows = options.slice(0, WA.LIST_ROWS_MAX).map(toRow);
 
     await whatsappService.sendInteractiveListMessage(
       phone,
