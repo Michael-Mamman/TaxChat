@@ -15,8 +15,17 @@ class JTBService {
     nin?: string;
     dob?: string;
   }): Promise<IntegrationResponse<TINLookupResult[]>> {
+    console.log("[jtb.service::lookupTIN] ENTER", {
+      hasName: !!params.name,
+      hasPhone: !!params.phone,
+      hasEmail: !!params.email,
+      hasNin: !!params.nin,
+      hasDob: !!params.dob,
+      baseUrl: this.baseUrl,
+    });
     console.log("[JTB] lookupTIN stub called:", JSON.stringify(params));
 
+    console.log("[jtb.service::lookupTIN] EXIT", { status: 200, resultCount: 2 });
     return {
       success: true,
       message: "TIN lookup completed successfully (stub)",
@@ -51,8 +60,13 @@ class JTBService {
   }
 
   async verifyTIN(tin: string): Promise<IntegrationResponse<TINLookupResult>> {
+    console.log("[jtb.service::verifyTIN] ENTER", {
+      tinLength: tin?.length,
+      baseUrl: this.baseUrl,
+    });
     console.log("[JTB] verifyTIN stub called:", tin);
 
+    console.log("[jtb.service::verifyTIN] EXIT", { status: 200 });
     return {
       success: true,
       message: "TIN verified successfully (stub)",
@@ -89,8 +103,23 @@ class JTBService {
     employment_status?: string;
     employer_tin?: string;
   }): Promise<IntegrationResponse<TINLookupResult>> {
+    console.log("[jtb.service::registerTIN] ENTER", {
+      tax_type: payload.tax_type,
+      state: payload.state,
+      lga: payload.lga,
+      gender: payload.gender,
+      hasMiddleName: !!payload.middle_name,
+      hasEmail: !!payload.email,
+      hasNin: !!payload.nin,
+      hasBvn: !!payload.bvn,
+      employment_status: payload.employment_status,
+    });
     console.log("[JTB] registerTIN stub called:", JSON.stringify(payload));
 
+    console.log("[jtb.service::registerTIN] EXIT", {
+      status: 201,
+      state: payload.state,
+    });
     return {
       success: true,
       message: "TIN registration submitted successfully (stub)",
@@ -113,8 +142,13 @@ class JTBService {
   async getTINStatus(
     applicationRef: string
   ): Promise<IntegrationResponse<TINLookupResult>> {
+    console.log("[jtb.service::getTINStatus] ENTER", { applicationRef });
     console.log("[JTB] getTINStatus stub called:", applicationRef);
 
+    console.log("[jtb.service::getTINStatus] EXIT", {
+      applicationRef,
+      status: 200,
+    });
     return {
       success: true,
       message: "TIN application status retrieved (stub)",

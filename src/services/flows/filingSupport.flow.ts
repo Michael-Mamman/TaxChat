@@ -18,10 +18,14 @@ class FilingSupportFlow {
     phone: string,
     entities?: Record<string, string>,
   ): Promise<FlowStepResult> {
+    console.log('[filingSupport.flow::start] ENTER', { phone, entityKeys: entities ? Object.keys(entities) : [] });
     // If the NLU already identified a tax type, skip to lookup
     if (entities?.tax_type) {
+      console.log('[filingSupport.flow::start] branch: entities.tax_type provided');
       const taxType = entities.tax_type.toUpperCase();
       if (["CIT", "VAT", "PAYE", "WHT"].includes(taxType)) {
+        console.log('[filingSupport.flow::start] branch: valid tax type - advance to step 1', { taxType });
+        console.log('[filingSupport.flow::start] EXIT', { next_step: 1, awaiting_input: 'lookup_in_progress' });
         return {
           message:
             `I'll look up your *${taxType}* filing status now. One moment...`,
@@ -31,6 +35,8 @@ class FilingSupportFlow {
       }
     }
 
+    console.log('[filingSupport.flow::start] branch: default path - ask tax type');
+    console.log('[filingSupport.flow::start] EXIT', { next_step: 0, awaiting_input: 'tax_type' });
     return {
       message:
         "I can help you with your tax filing obligations.\n\n" +
@@ -68,15 +74,19 @@ class FilingSupportFlow {
     step: number,
     data: Record<string, unknown>,
   ): Promise<FlowStepResult> {
+    console.log('[filingSupport.flow::handleInput] ENTER', { phone, step, inputLen: input.length, inputPreview: input.slice(0, 3) + '***' });
     switch (step) {
       // ------------------------------------------------------------------
       // Step 0: Capture the tax type
       // ------------------------------------------------------------------
       case 0: {
+        console.log('[filingSupport.flow::handleInput] branch: case 0 - capture tax type');
         const taxType = input.trim().toUpperCase();
         const validTypes = ["CIT", "VAT", "PAYE", "WHT"];
 
         if (!validTypes.includes(taxType)) {
+          console.log('[filingSupport.flow::handleInput] branch: invalid tax type');
+          console.log('[filingSupport.flow::handleInput] EXIT', { next_step: 0, awaiting_input: 'tax_type' });
           return {
             message:
               "Please select a valid tax type from the options below:",
@@ -92,8 +102,10 @@ class FilingSupportFlow {
         }
 
         data.tax_type = taxType;
+        console.log('[filingSupport.flow::handleInput] branch: valid tax type', { taxType });
 
         // Ask for TIN to look up filing status
+        console.log('[filingSupport.flow::handleInput] EXIT', { next_step: 1, awaiting_input: 'tin' });
         return {
           message:
             `You selected *${taxType}*.\n\n` +
@@ -108,9 +120,12 @@ class FilingSupportFlow {
       // Step 1: Collect TIN and lookup filing status via TaxProMax
       // ------------------------------------------------------------------
       case 1: {
+        console.log('[filingSupport.flow::handleInput] branch: case 1 - TIN lookup');
         const tin = input.trim().replace(/[\s-]/g, "");
 
         if (!/^\d{10}$/.test(tin)) {
+          console.log('[filingSupport.flow::handleInput] branch: invalid TIN format');
+          console.log('[filingSupport.flow::handleInput] EXIT', { next_step: 1, awaiting_input: 'tin' });
           return {
             message:
               "A TIN must be exactly *10 digits*. Please re-enter your TIN:\n\n" +
@@ -122,11 +137,14 @@ class FilingSupportFlow {
 
         data.tin = tin;
         const taxType = data.tax_type as string;
+        console.log('[filingSupport.flow::handleInput] branch: fetching filing status', { taxType, tinPreview: tin.slice(0, 3) + '***' });
 
         // Fetch filing status from TaxProMax
         const result = await taxProMaxService.getFilingStatus(tin);
 
         if (!result.success || !result.data) {
+          console.log('[filingSupport.flow::handleInput] branch: filing status lookup failed');
+          console.log('[filingSupport.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'error_action' });
           return {
             message:
               "I was unable to retrieve your filing status at this time.\n\n" +
@@ -150,6 +168,8 @@ class FilingSupportFlow {
         data.filings = filings;
 
         if (filings.length === 0) {
+          console.log('[filingSupport.flow::handleInput] branch: no filings found for tax type');
+          console.log('[filingSupport.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'no_records_action' });
           return {
             message:
               `No *${taxType}* filing records were found for TIN *${tin.slice(0, 3)}****${tin.slice(-2)}*.\n\n` +
@@ -167,6 +187,7 @@ class FilingSupportFlow {
           };
         }
 
+        console.log('[filingSupport.flow::handleInput] branch: filings retrieved', { count: filings.length });
         // Build a filing status summary
         const summary = filings.map((f) => {
           const statusEmoji =
@@ -184,14 +205,17 @@ class FilingSupportFlow {
 
         let followUp: string;
         if (overdueCount > 0) {
+          console.log('[filingSupport.flow::handleInput] branch: has overdue filings', { overdueCount });
           followUp =
             `\n\nYou have *${overdueCount} overdue filing(s)* that require immediate attention.\n\n` +
             "What would you like to do?";
         } else if (pendingCount > 0) {
+          console.log('[filingSupport.flow::handleInput] branch: has pending filings', { pendingCount });
           followUp =
             `\n\nYou have *${pendingCount} pending filing(s)* approaching their deadline.\n\n` +
             "What would you like to do?";
         } else {
+          console.log('[filingSupport.flow::handleInput] branch: all up to date');
           followUp =
             "\n\nAll your filings are up to date! Is there anything else I can help with?";
         }
@@ -208,6 +232,7 @@ class FilingSupportFlow {
                 { id: "done", title: "I'm Done" },
               ];
 
+        console.log('[filingSupport.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'status_action' });
         return {
           message:
             `*${taxType} Filing Status for TIN ${tin.slice(0, 3)}****${tin.slice(-2)}*\n\n` +
@@ -223,10 +248,13 @@ class FilingSupportFlow {
       // Step 2: Display guidance or offer ITSM ticket
       // ------------------------------------------------------------------
       case 2: {
+        console.log('[filingSupport.flow::handleInput] branch: case 2 - status action');
         const choice = input.trim().toLowerCase();
         const taxType = data.tax_type as string;
 
         if (choice === "done" || choice === "i'm done" || choice === "no" || choice === "no, i'll try later") {
+          console.log('[filingSupport.flow::handleInput] branch: done');
+          console.log('[filingSupport.flow::handleInput] EXIT', { flow_complete: true });
           return {
             message:
               "Thank you! If you need filing assistance in the future, just say *filing support* or *help me file*.\n\n" +
@@ -236,8 +264,9 @@ class FilingSupportFlow {
         }
 
         if (choice === "guidance" || choice === "filing guidance") {
+          console.log('[filingSupport.flow::handleInput] branch: guidance requested');
           const guidance = this.getFilingGuidance(taxType);
-
+          console.log('[filingSupport.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'post_guidance_action' });
           return {
             message:
               guidance +
@@ -252,6 +281,8 @@ class FilingSupportFlow {
         }
 
         if (choice === "raise_ticket" || choice === "raise support ticket" || choice === "yes, raise a ticket" || choice === "yes") {
+          console.log('[filingSupport.flow::handleInput] branch: raise_ticket selected');
+          console.log('[filingSupport.flow::handleInput] EXIT', { next_step: 3, awaiting_input: 'ticket_description' });
           return {
             message:
               "I'll create a support ticket for you.\n\n" +
@@ -262,6 +293,8 @@ class FilingSupportFlow {
           };
         }
 
+        console.log('[filingSupport.flow::handleInput] branch: case 2 default - re-prompt');
+        console.log('[filingSupport.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'status_action' });
         return {
           message: "Please select one of the options below:",
           buttons: [
@@ -278,9 +311,12 @@ class FilingSupportFlow {
       // Step 3: Create ITSM ticket (FIL-SUP)
       // ------------------------------------------------------------------
       case 3: {
+        console.log('[filingSupport.flow::handleInput] branch: case 3 - ticket creation');
         const description = input.trim();
 
         if (description.length < 10) {
+          console.log('[filingSupport.flow::handleInput] branch: description too short');
+          console.log('[filingSupport.flow::handleInput] EXIT', { next_step: 3, awaiting_input: 'ticket_description' });
           return {
             message:
               "Please provide a bit more detail so we can assist you effectively.\n\n" +
@@ -293,6 +329,7 @@ class FilingSupportFlow {
         const taxType = data.tax_type as string;
         const tin = (data.tin as string) ?? "N/A";
 
+        console.log('[filingSupport.flow::handleInput] branch: creating FIL-SUP ticket');
         const ticketResult = await itsmService.createTicket({
           type: "FIL-SUP",
           subject: `Filing Support - ${taxType} - TIN ${tin}`,
@@ -307,6 +344,8 @@ class FilingSupportFlow {
         });
 
         if (!ticketResult.success) {
+          console.log('[filingSupport.flow::handleInput] branch: ticket creation failed');
+          console.log('[filingSupport.flow::handleInput] EXIT', { flow_complete: true, error: 'ticket creation failed' });
           return {
             message:
               "I'm sorry, there was an issue creating your support ticket.\n\n" +
@@ -316,6 +355,8 @@ class FilingSupportFlow {
           };
         }
 
+        console.log('[filingSupport.flow::handleInput] branch: ticket created', { reference: ticketResult.data!.reference });
+        console.log('[filingSupport.flow::handleInput] EXIT', { flow_complete: true });
         return {
           message:
             `Your filing support ticket has been created successfully!\n\n` +
@@ -331,6 +372,8 @@ class FilingSupportFlow {
       }
 
       default:
+        console.log('[filingSupport.flow::handleInput] branch: default case - unknown step');
+        console.log('[filingSupport.flow::handleInput] EXIT', { next_step: 0, awaiting_input: 'tax_type' });
         return {
           message:
             "Something went wrong. Let's start the filing support again.",
@@ -342,6 +385,7 @@ class FilingSupportFlow {
 
   /** Returns step-by-step filing guidance for a tax type */
   private getFilingGuidance(taxType: string): string {
+    console.log('[filingSupport.flow::getFilingGuidance] ENTER', { taxType });
     const deadlines: Record<string, string> = {
       CIT: "within 6 months after the end of your accounting year",
       VAT: "by the 21st of the following month",
@@ -388,7 +432,9 @@ class FilingSupportFlow {
         `*Deadline:* WHT must be remitted ${deadlines["WHT"]}.`,
     };
 
-    return guidance[taxType] ?? "Please visit https://taxpromax.firs.gov.ng for filing instructions.";
+    const result = guidance[taxType] ?? "Please visit https://taxpromax.firs.gov.ng for filing instructions.";
+    console.log('[filingSupport.flow::getFilingGuidance] EXIT', { hasGuidance: !!guidance[taxType] });
+    return result;
   }
 }
 

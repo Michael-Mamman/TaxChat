@@ -14,9 +14,25 @@ class TaxProMaxService {
     tin: string,
     taxYear?: number
   ): Promise<IntegrationResponse<FilingStatus[]>> {
+    console.log("[taxpromax.service::getFilingStatus] ENTER", {
+      tinLength: tin?.length,
+      taxYear,
+      baseUrl: this.baseUrl,
+    });
     console.log("[TaxProMax] getFilingStatus stub called:", tin, taxYear);
 
+    if (taxYear !== undefined) {
+      console.log("[taxpromax.service::getFilingStatus] branch: using provided taxYear");
+    } else {
+      console.log("[taxpromax.service::getFilingStatus] branch: defaulting to previous year");
+    }
+
     const year = taxYear ?? new Date().getFullYear() - 1;
+    console.log("[taxpromax.service::getFilingStatus] EXIT", {
+      status: 200,
+      year,
+      count: 3,
+    });
     return {
       success: true,
       message: "Filing status retrieved successfully (stub)",
@@ -55,9 +71,18 @@ class TaxProMaxService {
   async getAssessments(
     tin: string
   ): Promise<IntegrationResponse<AssessmentDetail[]>> {
+    console.log("[taxpromax.service::getAssessments] ENTER", {
+      tinLength: tin?.length,
+      baseUrl: this.baseUrl,
+    });
     console.log("[TaxProMax] getAssessments stub called:", tin);
 
     const year = new Date().getFullYear() - 1;
+    console.log("[taxpromax.service::getAssessments] EXIT", {
+      status: 200,
+      year,
+      count: 2,
+    });
     return {
       success: true,
       message: "Assessments retrieved successfully (stub)",
@@ -98,9 +123,18 @@ class TaxProMaxService {
   async getPaymentHistory(
     tin: string
   ): Promise<IntegrationResponse<AssessmentDetail[]>> {
+    console.log("[taxpromax.service::getPaymentHistory] ENTER", {
+      tinLength: tin?.length,
+      baseUrl: this.baseUrl,
+    });
     console.log("[TaxProMax] getPaymentHistory stub called:", tin);
 
     const year = new Date().getFullYear();
+    console.log("[taxpromax.service::getPaymentHistory] EXIT", {
+      status: 200,
+      year,
+      count: 2,
+    });
     return {
       success: true,
       message: "Payment history retrieved successfully (stub)",
@@ -141,9 +175,18 @@ class TaxProMaxService {
   async getComplianceStatus(
     tin: string
   ): Promise<IntegrationResponse<ComplianceCheckResult>> {
+    console.log("[taxpromax.service::getComplianceStatus] ENTER", {
+      tinLength: tin?.length,
+      baseUrl: this.baseUrl,
+    });
     console.log("[TaxProMax] getComplianceStatus stub called:", tin);
 
     const year = new Date().getFullYear() - 1;
+    console.log("[taxpromax.service::getComplianceStatus] EXIT", {
+      status: 200,
+      year,
+      is_compliant: false,
+    });
     return {
       success: true,
       message: "Compliance status retrieved successfully (stub)",
@@ -204,9 +247,18 @@ class TaxProMaxService {
   async getOutstandingLiabilities(
     tin: string
   ): Promise<IntegrationResponse<AssessmentDetail[]>> {
+    console.log("[taxpromax.service::getOutstandingLiabilities] ENTER", {
+      tinLength: tin?.length,
+      baseUrl: this.baseUrl,
+    });
     console.log("[TaxProMax] getOutstandingLiabilities stub called:", tin);
 
     const year = new Date().getFullYear() - 1;
+    console.log("[taxpromax.service::getOutstandingLiabilities] EXIT", {
+      status: 200,
+      year,
+      count: 2,
+    });
     return {
       success: true,
       message: "Outstanding liabilities retrieved successfully (stub)",

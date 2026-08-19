@@ -6,6 +6,8 @@ import ServiceRequest from "../models/serviceRequest.model.js";
 import Notification from "../models/notification.model.js";
 import AuditLog from "../models/auditLog.model.js";
 
+console.log('[options::module] ENTER', { loading: true });
+
 const TaxpayerResource = {
   resource: Taxpayer,
   options: {
@@ -13,6 +15,7 @@ const TaxpayerResource = {
     sort: { sortBy: "createdAt", direction: "desc" as const },
   },
 };
+console.log('[options::module] branch: TaxpayerResource defined');
 
 const ServiceRequestResource = {
   resource: ServiceRequest,
@@ -21,6 +24,7 @@ const ServiceRequestResource = {
     sort: { sortBy: "createdAt", direction: "desc" as const },
   },
 };
+console.log('[options::module] branch: ServiceRequestResource defined');
 
 const NotificationResource = {
   resource: Notification,
@@ -29,6 +33,7 @@ const NotificationResource = {
     sort: { sortBy: "createdAt", direction: "desc" as const },
   },
 };
+console.log('[options::module] branch: NotificationResource defined');
 
 const AuditLogResource = {
   resource: AuditLog,
@@ -42,6 +47,7 @@ const AuditLogResource = {
     },
   },
 };
+console.log('[options::module] branch: AuditLogResource defined');
 
 const options: AdminJSOptions = {
   resources: [TaxpayerResource, ServiceRequestResource, NotificationResource, AuditLogResource],
@@ -57,5 +63,7 @@ const options: AdminJSOptions = {
     companyName: "NRS TaxChat",
   },
 };
+
+console.log('[options::module] EXIT', { resourceCount: options.resources?.length, rootPath: options.rootPath });
 
 export default options;

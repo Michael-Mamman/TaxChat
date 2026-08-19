@@ -1,0 +1,358 @@
+import axios from "axios";
+import fs from "fs";
+import path from "path";
+import { PHONE_NUMBER_ID, WHATSAPP_TOKEN } from "../../config.js";
+import { WA, clamp, splitInteractiveBody, toRow } from "./whatsapp.limits.js";
+class WhatsAppService {
+    apiUrl = `https://graph.facebook.com/v22.0/${PHONE_NUMBER_ID}/messages`;
+    async sendMessage(to, message) {
+        console.log("[whatsapp.service::sendMessage] ENTER", { to: to ? `${to.slice(0, 4)}***` : null, messageLength: message?.length });
+        try {
+            await axios.post(this.apiUrl, {
+                messaging_product: "whatsapp",
+                to,
+                text: { body: message },
+            }, {
+                headers: {
+                    Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+                    "Content-Type": "application/json",
+                },
+            });
+            console.log("[whatsapp.service::sendMessage] EXIT", { ok: true });
+        }
+        catch (err) {
+            console.log("[whatsapp.service::sendMessage] branch: caught error");
+            if (axios.isAxiosError(err)) {
+                console.error("Send message error:", err.response?.status, err.response?.data);
+            }
+            else if (err instanceof Error) {
+                console.error(err.message);
+            }
+            console.log("[whatsapp.service::sendMessage] EXIT", { ok: false });
+        }
+    }
+    async sendInteractiveListMessage(to, headerText, bodyText, footerText, sections) {
+        console.log("[whatsapp.service::sendInteractiveListMessage] ENTER", { to: to ? `${to.slice(0, 4)}***` : null, headerText, sectionsCount: sections?.length, rowsCount: sections?.reduce((n, s) => n + s.rows.length, 0) });
+        try {
+            await axios.post(this.apiUrl, {
+                messaging_product: "whatsapp",
+                to,
+                type: "interactive",
+                interactive: {
+                    type: "list",
+                    header: { type: "text", text: headerText },
+                    body: { text: bodyText },
+                    footer: { text: footerText },
+                    action: {
+                        button: "View Options",
+                        sections,
+                    },
+                },
+            }, {
+                headers: {
+                    Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+                    "Content-Type": "application/json",
+                },
+            });
+            console.log("[whatsapp.service::sendInteractiveListMessage] EXIT", { ok: true });
+        }
+        catch (err) {
+            console.log("[whatsapp.service::sendInteractiveListMessage] branch: caught error");
+            if (axios.isAxiosError(err)) {
+                console.error("Send list error:", err.response?.status, err.response?.data);
+            }
+            console.log("[whatsapp.service::sendInteractiveListMessage] EXIT", { ok: false });
+        }
+    }
+    async sendInteractiveButtonMessage(to, bodyText, buttons) {
+        console.log("[whatsapp.service::sendInteractiveButtonMessage] ENTER", { to: to ? `${to.slice(0, 4)}***` : null, bodyLength: bodyText?.length, buttonCount: buttons?.length });
+        try {
+            await axios.post(this.apiUrl, {
+                messaging_product: "whatsapp",
+                to,
+                type: "interactive",
+                interactive: {
+                    type: "button",
+                    body: { text: bodyText },
+                    action: {
+                        buttons: buttons.slice(0, WA.REPLY_BUTTONS_MAX).map((b) => ({
+                            type: "reply",
+                            reply: { id: b.id, title: clamp(b.title, WA.BUTTON_TITLE_MAX) },
+                        })),
+                    },
+                },
+            }, {
+                headers: {
+                    Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+                    "Content-Type": "application/json",
+                },
+            });
+            console.log("[whatsapp.service::sendInteractiveButtonMessage] EXIT", { ok: true });
+        }
+        catch (err) {
+            console.log("[whatsapp.service::sendInteractiveButtonMessage] branch: caught error");
+            if (axios.isAxiosError(err)) {
+                console.error("Send button error:", err.response?.status, err.response?.data);
+            }
+            console.log("[whatsapp.service::sendInteractiveButtonMessage] EXIT", { ok: false });
+        }
+    }
+    /**
+     * Present a set of choices, picking the interactive type that can actually
+     * hold them.
+     *
+     * WhatsApp allows at most 3 reply buttons with 20-character titles. Flows
+     * routinely produce 4 options - taxClearance offers one action per compliance
+     * gap plus "Speak to an Officer" - and blindly slicing to 3 drops the last
+     * one, which is the escape hatch, for exactly the taxpayer who most needs it.
+     * Rendering as a list instead keeps every option.
+     */
+    async sendChoice(to, bodyText, options) {
+        console.log('[whatsapp.service::sendChoice] ENTER', { to: to ? `${to.slice(0, 4)}***` : null, optionCount: options.length, bodyLength: bodyText?.length });
+        const { preamble, body } = splitInteractiveBody(bodyText);
+        if (preamble) {
+            console.log('[whatsapp.service::sendChoice] branch: body over interactive limit - sending preamble');
+            await this.sendMessage(to, preamble);
+        }
+        const needsList = options.length > WA.REPLY_BUTTONS_MAX ||
+            options.some((o) => o.title.length > WA.BUTTON_TITLE_MAX) ||
+            options.some((o) => !!o.description);
+        if (needsList) {
+            if (options.length > WA.LIST_ROWS_MAX) {
+                console.warn('[whatsapp.service::sendChoice] truncating rows to WhatsApp limit', { count: options.length, kept: WA.LIST_ROWS_MAX });
+            }
+            console.log('[whatsapp.service::sendChoice] branch: rendering as list', { rows: Math.min(options.length, WA.LIST_ROWS_MAX) });
+            await this.sendInteractiveListMessage(to, "NRS TaxChat", body, "Official NRS Virtual Tax Office", [{ title: "Options", rows: options.slice(0, WA.LIST_ROWS_MAX).map(toRow) }]);
+            console.log('[whatsapp.service::sendChoice] EXIT', { rendered: 'list' });
+            return;
+        }
+        console.log('[whatsapp.service::sendChoice] branch: rendering as buttons', { count: options.length });
+        await this.sendInteractiveButtonMessage(to, body, options);
+        console.log('[whatsapp.service::sendChoice] EXIT', { rendered: 'buttons' });
+    }
+    async sendMainMenu(to, options) {
+        console.log("[whatsapp.service::sendMainMenu] ENTER", { to: to ? `${to.slice(0, 4)}***` : null, optionsCount: options?.length });
+        const rows = options.slice(0, WA.LIST_ROWS_MAX).map(toRow);
+        await this.sendInteractiveListMessage(to, "NRS TaxChat", "What would you like to do today?", "Official NRS Virtual Tax Office", [{ title: "Tax Services", rows }]);
+        console.log("[whatsapp.service::sendMainMenu] EXIT", { rows: rows.length });
+    }
+    async sendFlowMessage(recipientPhone, flowToken, flowId, body, flowCta, screen) {
+        console.log("[whatsapp.service::sendFlowMessage] ENTER", { to: recipientPhone ? `${recipientPhone.slice(0, 4)}***` : null, flowId, hasFlowToken: !!flowToken, screen, flowCta });
+        try {
+            const url = `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`;
+            const data = {
+                messaging_product: "whatsapp",
+                to: recipientPhone,
+                recipient_type: "individual",
+                type: "interactive",
+                interactive: {
+                    type: "flow",
+                    header: { type: "text", text: "NRS TaxChat\n\u200E" },
+                    body: { text: body },
+                    footer: { text: "Official NRS Virtual Tax Office" },
+                    action: {
+                        name: "flow",
+                        parameters: {
+                            flow_message_version: "3",
+                            flow_action: "navigate",
+                            flow_token: flowToken,
+                            flow_id: flowId,
+                            flow_cta: flowCta,
+                            flow_action_payload: {
+                                screen,
+                                data: {},
+                            },
+                        },
+                    },
+                },
+            };
+            await axios.post(url, data, {
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+                },
+            });
+            console.log("[whatsapp.service::sendFlowMessage] EXIT", { ok: true });
+        }
+        catch (err) {
+            console.log("[whatsapp.service::sendFlowMessage] branch: caught error");
+            if (axios.isAxiosError(err)) {
+                console.error("Send flow error:", err.response?.status, err.response?.data);
+            }
+            console.log("[whatsapp.service::sendFlowMessage] EXIT", { ok: false, rethrow: true });
+            throw err;
+        }
+    }
+    async sendInitFlowMessage(recipientPhone, flowToken, flowId, body, flowCta, _screen) {
+        console.log("[whatsapp.service::sendInitFlowMessage] ENTER", { to: recipientPhone ? `${recipientPhone.slice(0, 4)}***` : null, flowId, hasFlowToken: !!flowToken, flowCta });
+        try {
+            const url = `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`;
+            const data = {
+                messaging_product: "whatsapp",
+                to: recipientPhone,
+                recipient_type: "individual",
+                type: "interactive",
+                interactive: {
+                    type: "flow",
+                    header: { type: "text", text: "NRS TaxChat\n\u200E" },
+                    body: { text: body },
+                    footer: { text: "Official NRS Virtual Tax Office" },
+                    action: {
+                        name: "flow",
+                        parameters: {
+                            flow_message_version: "3",
+                            flow_action: "data_exchange",
+                            flow_token: flowToken,
+                            flow_id: flowId,
+                            flow_cta: flowCta,
+                        },
+                    },
+                },
+            };
+            await axios.post(url, data, {
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+                },
+            });
+            console.log("[whatsapp.service::sendInitFlowMessage] EXIT", { ok: true });
+        }
+        catch (err) {
+            console.log("[whatsapp.service::sendInitFlowMessage] branch: caught error");
+            if (axios.isAxiosError(err)) {
+                console.error("Send init flow error:", err.response?.status, err.response?.data);
+            }
+            console.log("[whatsapp.service::sendInitFlowMessage] EXIT", { ok: false, rethrow: true });
+            throw err;
+        }
+    }
+    async sendTemplateMessage(to, templateName, languageCode, components) {
+        console.log("[whatsapp.service::sendTemplateMessage] ENTER", { to: to ? `${to.slice(0, 4)}***` : null, templateName, languageCode, componentsCount: components?.length });
+        try {
+            const response = await axios.post(this.apiUrl, {
+                messaging_product: "whatsapp",
+                to,
+                type: "template",
+                template: {
+                    name: templateName,
+                    language: { code: languageCode },
+                    components,
+                },
+            }, {
+                headers: {
+                    Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+                    "Content-Type": "application/json",
+                },
+            });
+            const msgId = response.data?.messages?.[0]?.id ?? null;
+            console.log("[whatsapp.service::sendTemplateMessage] EXIT", { ok: true, hasMessageId: !!msgId });
+            return msgId;
+        }
+        catch (err) {
+            console.log("[whatsapp.service::sendTemplateMessage] branch: caught error");
+            if (axios.isAxiosError(err)) {
+                console.error("Send template error:", err.response?.status, err.response?.data);
+            }
+            console.log("[whatsapp.service::sendTemplateMessage] EXIT", { ok: false });
+            return null;
+        }
+    }
+    async sendImage(to, mediaId, caption) {
+        console.log("[whatsapp.service::sendImage] ENTER", { to: to ? `${to.slice(0, 4)}***` : null, hasMediaId: !!mediaId, hasCaption: !!caption });
+        try {
+            await axios.post(this.apiUrl, {
+                messaging_product: "whatsapp",
+                to,
+                type: "image",
+                image: { id: mediaId, caption },
+            }, {
+                headers: {
+                    Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+                    "Content-Type": "application/json",
+                },
+            });
+            console.log("[whatsapp.service::sendImage] EXIT", { ok: true });
+        }
+        catch (err) {
+            console.log("[whatsapp.service::sendImage] branch: caught error");
+            if (axios.isAxiosError(err)) {
+                console.error("Send image error:", err.response?.status, err.response?.data);
+            }
+            console.log("[whatsapp.service::sendImage] EXIT", { ok: false, rethrow: true });
+            throw err;
+        }
+    }
+    async uploadMedia(filePath, fileType = "application/pdf") {
+        console.log("[whatsapp.service::uploadMedia] ENTER", { filePath, fileType });
+        const url = `https://graph.facebook.com/v22.0/${PHONE_NUMBER_ID}/media`;
+        const form = new FormData();
+        const fileBuffer = fs.readFileSync(filePath);
+        const blob = new Blob([fileBuffer], { type: fileType });
+        form.append("file", blob, path.basename(filePath));
+        form.append("messaging_product", "whatsapp");
+        form.append("type", fileType);
+        console.log("[whatsapp.service::uploadMedia] uploading", { sizeBytes: fileBuffer.length });
+        try {
+            const response = await axios.post(url, form, {
+                headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` },
+            });
+            console.log("[whatsapp.service::uploadMedia] EXIT", { ok: true, hasId: !!response.data?.id });
+            return response.data.id;
+        }
+        catch (err) {
+            console.log("[whatsapp.service::uploadMedia] branch: caught error");
+            if (axios.isAxiosError(err)) {
+                console.error("Media upload error:", err.response?.status, err.response?.data);
+            }
+            console.log("[whatsapp.service::uploadMedia] EXIT", { ok: false, rethrow: true });
+            throw err;
+        }
+    }
+    async sendDocument(to, mediaId, fileName, caption) {
+        console.log("[whatsapp.service::sendDocument] ENTER", { to: to ? `${to.slice(0, 4)}***` : null, fileName, hasMediaId: !!mediaId, hasCaption: !!caption });
+        try {
+            await axios.post(this.apiUrl, {
+                messaging_product: "whatsapp",
+                to,
+                type: "document",
+                document: { id: mediaId, filename: fileName, caption },
+            }, {
+                headers: {
+                    Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+                    "Content-Type": "application/json",
+                },
+            });
+            console.log("[whatsapp.service::sendDocument] EXIT", { ok: true });
+        }
+        catch (err) {
+            console.log("[whatsapp.service::sendDocument] branch: caught error");
+            if (axios.isAxiosError(err)) {
+                console.error("Send document error:", err.response?.status, err.response?.data);
+            }
+            console.log("[whatsapp.service::sendDocument] EXIT", { ok: false, rethrow: true });
+            throw err;
+        }
+    }
+    async markAsRead(messageId) {
+        console.log("[whatsapp.service::markAsRead] ENTER", { hasMessageId: !!messageId });
+        try {
+            await axios.post(this.apiUrl, {
+                messaging_product: "whatsapp",
+                status: "read",
+                message_id: messageId,
+            }, {
+                headers: {
+                    Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+                    "Content-Type": "application/json",
+                },
+            });
+            console.log("[whatsapp.service::markAsRead] EXIT", { ok: true });
+        }
+        catch (err) {
+            console.log("[whatsapp.service::markAsRead] branch: caught error (best-effort)");
+            // Read receipts are best-effort
+            console.log("[whatsapp.service::markAsRead] EXIT", { ok: false });
+        }
+    }
+}
+export default new WhatsAppService();

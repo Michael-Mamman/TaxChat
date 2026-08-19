@@ -16,8 +16,16 @@ class RemitaService {
   async getPaymentStatus(
     reference: string
   ): Promise<IntegrationResponse<PaymentStatusResult>> {
+    console.log("[remita.service::getPaymentStatus] ENTER", {
+      referenceLength: reference?.length,
+      baseUrl: this.baseUrl,
+    });
     console.log("[Remita] getPaymentStatus stub called:", reference);
 
+    console.log("[remita.service::getPaymentStatus] EXIT", {
+      status: 200,
+      paymentStatus: "POSTED",
+    });
     return {
       success: true,
       message: "Payment status retrieved successfully (stub)",
@@ -39,8 +47,16 @@ class RemitaService {
   async verifyPayment(
     reference: string
   ): Promise<IntegrationResponse<PaymentStatusResult>> {
+    console.log("[remita.service::verifyPayment] ENTER", {
+      referenceLength: reference?.length,
+      baseUrl: this.baseUrl,
+    });
     console.log("[Remita] verifyPayment stub called:", reference);
 
+    console.log("[remita.service::verifyPayment] EXIT", {
+      status: 200,
+      paymentStatus: "RECEIVED",
+    });
     return {
       success: true,
       message: "Payment verified successfully (stub)",
@@ -68,9 +84,19 @@ class RemitaService {
     tax_type: string;
     tin: string;
   }): Promise<IntegrationResponse<PaymentStatusResult>> {
+    console.log("[remita.service::generateRRR] ENTER", {
+      amount: payload.amount,
+      tax_type: payload.tax_type,
+      descriptionLength: payload.description?.length,
+      merchantId: this.merchantId ? "(configured)" : "(missing)",
+    });
     console.log("[Remita] generateRRR stub called:", JSON.stringify(payload));
 
     const rrr = `RRR-${Date.now().toString().slice(-12)}`;
+    console.log("[remita.service::generateRRR] EXIT", {
+      status: 201,
+      tax_type: payload.tax_type,
+    });
     return {
       success: true,
       message: `RRR generated successfully: ${rrr} (stub)`,

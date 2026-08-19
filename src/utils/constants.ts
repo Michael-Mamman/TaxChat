@@ -37,21 +37,51 @@ export const MAIN_MENU_OPTIONS = [
   { id: "general_enquiry", title: "Ask a question", description: "Ask a general tax question" },
 ] as const;
 
-/** Keywords that trigger escalation to live agent */
+/**
+ * Escalation triggers, split by how they are matched.
+ *
+ * These are only ever tested against free text the taxpayer typed - never
+ * against an interactive reply id, which is an internal identifier and not
+ * something the taxpayer wrote.
+ */
+
+/**
+ * Matched against the WHOLE message. Substring matching on these would hijack
+ * ordinary sentences: "can you help me file my VAT" is a filing request, not a
+ * request for a human, and "WHT agent TIN" is an answer, not an escape hatch.
+ */
 export const ESCALATION_KEYWORDS = [
   "agent",
   "human",
+  "help",
+  "help me",
+  "officer",
+  "complaint",
+  "frustrated",
+];
+
+/**
+ * Matched anywhere in the message. Every entry is long enough to be unambiguous
+ * on its own.
+ */
+export const ESCALATION_PHRASES = [
   "talk to someone",
   "speak to someone",
+  "talk to a human",
+  "speak to a human",
+  "talk to an agent",
+  "speak to an agent",
+  "speak to an officer",
   "live agent",
   "real person",
-  "help me",
-  "frustrated",
-  "complaint",
+  "customer service",
 ];
 
 /** Keyword that returns to main menu */
 export const MENU_KEYWORDS = ["menu", "start", "home", "back"];
 
-/** Greeting keywords that trigger welcome message */
-export const GREETING_KEYWORDS = ["hi", "hello", "hey", "start", "menu", "good morning", "good afternoon", "good evening"];
+/**
+ * Greeting keywords. Matched as a whole word at the start of the message, so
+ * "hi there" greets but "history" does not.
+ */
+export const GREETING_KEYWORDS = ["hi", "hello", "hey", "hiya", "start", "menu", "good morning", "good afternoon", "good evening"];

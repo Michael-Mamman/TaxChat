@@ -3,9 +3,11 @@ import type { EmailPayload, EmailResponse } from "../types/email.types.js";
 import { EMAIL_SERVICE_URL } from "../config.js";
 
 export async function sendEmail(payload: EmailPayload): Promise<EmailResponse> {
+  console.log('[email.service::sendEmail] ENTER', { tokenPresent: !!payload.token, toPresent: !!(payload as any).to });
   const url = `${EMAIL_SERVICE_URL}/email/send`;
 
   try {
+    console.log('[email.service::sendEmail] branch: try send');
     const response = await axios.post(url, payload, {
       headers: {
         "Content-Type": "application/json",
@@ -16,18 +18,23 @@ export async function sendEmail(payload: EmailPayload): Promise<EmailResponse> {
       maxBodyLength: Infinity,
     });
 
+    console.log('[email.service::sendEmail] branch: success');
+    console.log('[email.service::sendEmail] EXIT', { success: true });
     return {
       success: true,
       data: response.data,
       message: "Email sent successfully",
     };
   } catch (error: unknown) {
+    console.log('[email.service::sendEmail] branch: catch');
     if (axios.isAxiosError(error)) {
+      console.log('[email.service::sendEmail] branch: axios error');
       const axiosError = error as AxiosError<Record<string, unknown>>;
       console.error(
         "Failed to send email:",
         axiosError.response?.data || axiosError.message,
       );
+      console.log('[email.service::sendEmail] EXIT', { success: false, kind: 'axios' });
       return {
         success: false,
         error: axiosError.message,
@@ -37,7 +44,9 @@ export async function sendEmail(payload: EmailPayload): Promise<EmailResponse> {
       };
     }
 
+    console.log('[email.service::sendEmail] branch: unknown error');
     console.error("Unknown error sending email:", error);
+    console.log('[email.service::sendEmail] EXIT', { success: false, kind: 'unknown' });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",

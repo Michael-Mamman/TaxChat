@@ -3,11 +3,13 @@ import fs from "fs";
 import path from "path";
 import { PHONE_NUMBER_ID, WHATSAPP_TOKEN } from "../../config.js";
 import type { MenuOption } from "../../types/conversation.types.js";
+import { WA, clamp, splitInteractiveBody, toRow } from "./whatsapp.limits.js";
 
 class WhatsAppService {
   private apiUrl = `https://graph.facebook.com/v22.0/${PHONE_NUMBER_ID}/messages`;
 
   async sendMessage(to: string, message: string): Promise<void> {
+    console.log("[whatsapp.service::sendMessage] ENTER", { to: to ? `${to.slice(0, 4)}***` : null, messageLength: message?.length });
     try {
       await axios.post(
         this.apiUrl,
@@ -23,12 +25,15 @@ class WhatsAppService {
           },
         },
       );
+      console.log("[whatsapp.service::sendMessage] EXIT", { ok: true });
     } catch (err: unknown) {
+      console.log("[whatsapp.service::sendMessage] branch: caught error");
       if (axios.isAxiosError(err)) {
         console.error("Send message error:", err.response?.status, err.response?.data);
       } else if (err instanceof Error) {
         console.error(err.message);
       }
+      console.log("[whatsapp.service::sendMessage] EXIT", { ok: false });
     }
   }
 
@@ -42,6 +47,7 @@ class WhatsAppService {
       rows: Array<{ id: string; title: string; description?: string }>;
     }>,
   ): Promise<void> {
+    console.log("[whatsapp.service::sendInteractiveListMessage] ENTER", { to: to ? `${to.slice(0, 4)}***` : null, headerText, sectionsCount: sections?.length, rowsCount: sections?.reduce((n, s) => n + s.rows.length, 0) });
     try {
       await axios.post(
         this.apiUrl,
@@ -67,10 +73,13 @@ class WhatsAppService {
           },
         },
       );
+      console.log("[whatsapp.service::sendInteractiveListMessage] EXIT", { ok: true });
     } catch (err: unknown) {
+      console.log("[whatsapp.service::sendInteractiveListMessage] branch: caught error");
       if (axios.isAxiosError(err)) {
         console.error("Send list error:", err.response?.status, err.response?.data);
       }
+      console.log("[whatsapp.service::sendInteractiveListMessage] EXIT", { ok: false });
     }
   }
 
@@ -79,6 +88,7 @@ class WhatsAppService {
     bodyText: string,
     buttons: Array<{ id: string; title: string }>,
   ): Promise<void> {
+    console.log("[whatsapp.service::sendInteractiveButtonMessage] ENTER", { to: to ? `${to.slice(0, 4)}***` : null, bodyLength: bodyText?.length, buttonCount: buttons?.length });
     try {
       await axios.post(
         this.apiUrl,
@@ -90,9 +100,9 @@ class WhatsAppService {
             type: "button",
             body: { text: bodyText },
             action: {
-              buttons: buttons.slice(0, 3).map((b) => ({
+              buttons: buttons.slice(0, WA.REPLY_BUTTONS_MAX).map((b) => ({
                 type: "reply",
-                reply: { id: b.id, title: b.title },
+                reply: { id: b.id, title: clamp(b.title, WA.BUTTON_TITLE_MAX) },
               })),
             },
           },
@@ -104,22 +114,67 @@ class WhatsAppService {
           },
         },
       );
+      console.log("[whatsapp.service::sendInteractiveButtonMessage] EXIT", { ok: true });
     } catch (err: unknown) {
+      console.log("[whatsapp.service::sendInteractiveButtonMessage] branch: caught error");
       if (axios.isAxiosError(err)) {
         console.error("Send button error:", err.response?.status, err.response?.data);
       }
+      console.log("[whatsapp.service::sendInteractiveButtonMessage] EXIT", { ok: false });
     }
   }
 
+  /**
+   * Present a set of choices, picking the interactive type that can actually
+   * hold them.
+   *
+   * WhatsApp allows at most 3 reply buttons with 20-character titles. Flows
+   * routinely produce 4 options - taxClearance offers one action per compliance
+   * gap plus "Speak to an Officer" - and blindly slicing to 3 drops the last
+   * one, which is the escape hatch, for exactly the taxpayer who most needs it.
+   * Rendering as a list instead keeps every option.
+   */
+  async sendChoice(
+    to: string,
+    bodyText: string,
+    options: Array<{ id: string; title: string; description?: string }>,
+  ): Promise<void> {
+    console.log('[whatsapp.service::sendChoice] ENTER', { to: to ? `${to.slice(0, 4)}***` : null, optionCount: options.length, bodyLength: bodyText?.length });
+    const { preamble, body } = splitInteractiveBody(bodyText);
+    if (preamble) {
+      console.log('[whatsapp.service::sendChoice] branch: body over interactive limit - sending preamble');
+      await this.sendMessage(to, preamble);
+    }
+
+    const needsList =
+      options.length > WA.REPLY_BUTTONS_MAX ||
+      options.some((o) => o.title.length > WA.BUTTON_TITLE_MAX) ||
+      options.some((o) => !!o.description);
+
+    if (needsList) {
+      if (options.length > WA.LIST_ROWS_MAX) {
+        console.warn('[whatsapp.service::sendChoice] truncating rows to WhatsApp limit', { count: options.length, kept: WA.LIST_ROWS_MAX });
+      }
+      console.log('[whatsapp.service::sendChoice] branch: rendering as list', { rows: Math.min(options.length, WA.LIST_ROWS_MAX) });
+      await this.sendInteractiveListMessage(
+        to,
+        "NRS TaxChat",
+        body,
+        "Official NRS Virtual Tax Office",
+        [{ title: "Options", rows: options.slice(0, WA.LIST_ROWS_MAX).map(toRow) }],
+      );
+      console.log('[whatsapp.service::sendChoice] EXIT', { rendered: 'list' });
+      return;
+    }
+
+    console.log('[whatsapp.service::sendChoice] branch: rendering as buttons', { count: options.length });
+    await this.sendInteractiveButtonMessage(to, body, options);
+    console.log('[whatsapp.service::sendChoice] EXIT', { rendered: 'buttons' });
+  }
+
   async sendMainMenu(to: string, options: MenuOption[]): Promise<void> {
-    const rows = options.map((opt) => {
-      const row: { id: string; title: string; description?: string } = {
-        id: opt.id,
-        title: opt.title.slice(0, 24),
-      };
-      if (opt.description) row.description = opt.description.slice(0, 72);
-      return row;
-    });
+    console.log("[whatsapp.service::sendMainMenu] ENTER", { to: to ? `${to.slice(0, 4)}***` : null, optionsCount: options?.length });
+    const rows = options.slice(0, WA.LIST_ROWS_MAX).map(toRow);
 
     await this.sendInteractiveListMessage(
       to,
@@ -128,6 +183,7 @@ class WhatsAppService {
       "Official NRS Virtual Tax Office",
       [{ title: "Tax Services", rows }],
     );
+    console.log("[whatsapp.service::sendMainMenu] EXIT", { rows: rows.length });
   }
 
   async sendFlowMessage(
@@ -138,6 +194,7 @@ class WhatsAppService {
     flowCta?: string,
     screen?: string,
   ): Promise<void> {
+    console.log("[whatsapp.service::sendFlowMessage] ENTER", { to: recipientPhone ? `${recipientPhone.slice(0, 4)}***` : null, flowId, hasFlowToken: !!flowToken, screen, flowCta });
     try {
       const url = `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`;
 
@@ -174,10 +231,13 @@ class WhatsAppService {
           Authorization: `Bearer ${WHATSAPP_TOKEN}`,
         },
       });
+      console.log("[whatsapp.service::sendFlowMessage] EXIT", { ok: true });
     } catch (err: unknown) {
+      console.log("[whatsapp.service::sendFlowMessage] branch: caught error");
       if (axios.isAxiosError(err)) {
         console.error("Send flow error:", err.response?.status, err.response?.data);
       }
+      console.log("[whatsapp.service::sendFlowMessage] EXIT", { ok: false, rethrow: true });
       throw err;
     }
   }
@@ -190,6 +250,7 @@ class WhatsAppService {
     flowCta?: string,
     _screen?: string,
   ): Promise<void> {
+    console.log("[whatsapp.service::sendInitFlowMessage] ENTER", { to: recipientPhone ? `${recipientPhone.slice(0, 4)}***` : null, flowId, hasFlowToken: !!flowToken, flowCta });
     try {
       const url = `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`;
 
@@ -222,10 +283,13 @@ class WhatsAppService {
           Authorization: `Bearer ${WHATSAPP_TOKEN}`,
         },
       });
+      console.log("[whatsapp.service::sendInitFlowMessage] EXIT", { ok: true });
     } catch (err: unknown) {
+      console.log("[whatsapp.service::sendInitFlowMessage] branch: caught error");
       if (axios.isAxiosError(err)) {
         console.error("Send init flow error:", err.response?.status, err.response?.data);
       }
+      console.log("[whatsapp.service::sendInitFlowMessage] EXIT", { ok: false, rethrow: true });
       throw err;
     }
   }
@@ -239,6 +303,7 @@ class WhatsAppService {
       parameters: Array<{ type: string; text?: string }>;
     }>,
   ): Promise<string | null> {
+    console.log("[whatsapp.service::sendTemplateMessage] ENTER", { to: to ? `${to.slice(0, 4)}***` : null, templateName, languageCode, componentsCount: components?.length });
     try {
       const response = await axios.post(
         this.apiUrl,
@@ -259,16 +324,21 @@ class WhatsAppService {
           },
         },
       );
-      return response.data?.messages?.[0]?.id ?? null;
+      const msgId = response.data?.messages?.[0]?.id ?? null;
+      console.log("[whatsapp.service::sendTemplateMessage] EXIT", { ok: true, hasMessageId: !!msgId });
+      return msgId;
     } catch (err: unknown) {
+      console.log("[whatsapp.service::sendTemplateMessage] branch: caught error");
       if (axios.isAxiosError(err)) {
         console.error("Send template error:", err.response?.status, err.response?.data);
       }
+      console.log("[whatsapp.service::sendTemplateMessage] EXIT", { ok: false });
       return null;
     }
   }
 
   async sendImage(to: string, mediaId: string, caption?: string): Promise<void> {
+    console.log("[whatsapp.service::sendImage] ENTER", { to: to ? `${to.slice(0, 4)}***` : null, hasMediaId: !!mediaId, hasCaption: !!caption });
     try {
       await axios.post(
         this.apiUrl,
@@ -285,10 +355,13 @@ class WhatsAppService {
           },
         },
       );
+      console.log("[whatsapp.service::sendImage] EXIT", { ok: true });
     } catch (err: unknown) {
+      console.log("[whatsapp.service::sendImage] branch: caught error");
       if (axios.isAxiosError(err)) {
         console.error("Send image error:", err.response?.status, err.response?.data);
       }
+      console.log("[whatsapp.service::sendImage] EXIT", { ok: false, rethrow: true });
       throw err;
     }
   }
@@ -297,6 +370,7 @@ class WhatsAppService {
     filePath: string,
     fileType: string = "application/pdf",
   ): Promise<string> {
+    console.log("[whatsapp.service::uploadMedia] ENTER", { filePath, fileType });
     const url = `https://graph.facebook.com/v22.0/${PHONE_NUMBER_ID}/media`;
     const form = new FormData();
     const fileBuffer = fs.readFileSync(filePath);
@@ -304,16 +378,20 @@ class WhatsAppService {
     form.append("file", blob, path.basename(filePath));
     form.append("messaging_product", "whatsapp");
     form.append("type", fileType);
+    console.log("[whatsapp.service::uploadMedia] uploading", { sizeBytes: fileBuffer.length });
 
     try {
       const response = await axios.post(url, form, {
         headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` },
       });
+      console.log("[whatsapp.service::uploadMedia] EXIT", { ok: true, hasId: !!response.data?.id });
       return response.data.id;
     } catch (err: unknown) {
+      console.log("[whatsapp.service::uploadMedia] branch: caught error");
       if (axios.isAxiosError(err)) {
         console.error("Media upload error:", err.response?.status, err.response?.data);
       }
+      console.log("[whatsapp.service::uploadMedia] EXIT", { ok: false, rethrow: true });
       throw err;
     }
   }
@@ -324,6 +402,7 @@ class WhatsAppService {
     fileName: string,
     caption?: string,
   ): Promise<void> {
+    console.log("[whatsapp.service::sendDocument] ENTER", { to: to ? `${to.slice(0, 4)}***` : null, fileName, hasMediaId: !!mediaId, hasCaption: !!caption });
     try {
       await axios.post(
         this.apiUrl,
@@ -340,15 +419,19 @@ class WhatsAppService {
           },
         },
       );
+      console.log("[whatsapp.service::sendDocument] EXIT", { ok: true });
     } catch (err: unknown) {
+      console.log("[whatsapp.service::sendDocument] branch: caught error");
       if (axios.isAxiosError(err)) {
         console.error("Send document error:", err.response?.status, err.response?.data);
       }
+      console.log("[whatsapp.service::sendDocument] EXIT", { ok: false, rethrow: true });
       throw err;
     }
   }
 
   async markAsRead(messageId: string): Promise<void> {
+    console.log("[whatsapp.service::markAsRead] ENTER", { hasMessageId: !!messageId });
     try {
       await axios.post(
         this.apiUrl,
@@ -364,8 +447,11 @@ class WhatsAppService {
           },
         },
       );
+      console.log("[whatsapp.service::markAsRead] EXIT", { ok: true });
     } catch (err: unknown) {
+      console.log("[whatsapp.service::markAsRead] branch: caught error (best-effort)");
       // Read receipts are best-effort
+      console.log("[whatsapp.service::markAsRead] EXIT", { ok: false });
     }
   }
 }
