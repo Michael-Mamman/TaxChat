@@ -1,7 +1,13 @@
 import crypto from "crypto";
 import OTP from "../../models/otp.model.js";
 import smsService from "../integrations/sms.service.js";
-import { OTP_EXPIRY_SECONDS, MAX_OTP_ATTEMPTS } from "../../config.js";
+import {
+  OTP_EXPIRY_SECONDS,
+  MAX_OTP_ATTEMPTS,
+  OTP_DELIVERY_CHANNEL,
+  SMS_GATEWAY_URL,
+} from "../../config.js";
+import whatsappService from "../whatsapp/whatsapp.service.js";
 
 class OTPService {
   generateCode(): string {
@@ -36,16 +42,40 @@ class OTPService {
     });
     console.log('[otp.service::sendOTP] branch: created OTP record');
 
-    // Send via SMS gateway
-    const smsResult = await smsService.sendOTP(phone, code);
-    console.log(`[OTP] Sent OTP to ${phone}: ${smsResult.message}`);
-
-    // Mask phone for user-facing message
     const maskedPhone = phone.slice(0, -4).replace(/./g, "*") + phone.slice(-4);
-    console.log('[otp.service::sendOTP] EXIT', { phone, success: true });
+
+    // Deliver over WhatsApp when configured to. Without this the code is
+    // generated, stored, and seen by nobody: the SMS gateway is a stub with no
+    // URL, so the taxpayer waits for a message that never arrives and every
+    // tier-gated flow is unreachable.
+    if (OTP_DELIVERY_CHANNEL === "whatsapp") {
+      console.warn("[otp.service::sendOTP] delivering OTP over WhatsApp - same-channel delivery is not a second factor and must not be used in production");
+      await whatsappService.sendMessage(
+        phone,
+        `Your NRS TaxChat verification code is *${code}*.\n\n` +
+          `It expires in ${Math.round(OTP_EXPIRY_SECONDS / 60)} minutes. Do not share it with anyone.`,
+      );
+      console.log('[otp.service::sendOTP] EXIT', { channel: 'whatsapp', delivered: true });
+      return { success: true, message: "I've sent your verification code to this chat" };
+    }
+
+    if (!SMS_GATEWAY_URL) {
+      // Say so, rather than reporting a delivery that did not happen.
+      console.error('[otp.service::sendOTP] no SMS gateway configured and no fallback channel set');
+      console.log('[otp.service::sendOTP] EXIT', { channel: 'none', delivered: false });
+      return {
+        success: false,
+        message: "I couldn't send your verification code - the SMS service isn't available. Please type AGENT to speak with an officer.",
+      };
+    }
+
+    const smsResult = await smsService.sendOTP(phone, code);
+    console.log('[otp.service::sendOTP] EXIT', { channel: 'sms', delivered: smsResult.success });
     return {
-      success: true,
-      message: `OTP sent to ${maskedPhone}`,
+      success: smsResult.success,
+      message: smsResult.success
+        ? `OTP sent to ${maskedPhone}`
+        : "I couldn't send your verification code right now. Please try again shortly.",
     };
   }
 

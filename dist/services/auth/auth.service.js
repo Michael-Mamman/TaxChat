@@ -124,12 +124,29 @@ class AuthService {
         // Send OTP to registered phone
         const otpResult = await otpService.sendOTP(phone);
         console.log('[auth.service::verifyTIN] EXIT', { success: true, requires_next: 'otp' });
+        if (!otpResult.success) {
+            // Do not ask for a code that was never delivered.
+            return {
+                success: false,
+                tier: 0,
+                message: `TIN verified, but ${otpResult.message}`,
+            };
+        }
         return {
             success: true,
             tier: 0,
             message: `TIN verified. ${otpResult.message}. Please enter the 6-digit code.`,
             requires_next: "otp",
         };
+    }
+    /** Issue a fresh code, for when the previous one expired or never arrived. */
+    async resendOTP(phone) {
+        console.log('[auth.service::resendOTP] ENTER', { phone });
+        const result = await otpService.sendOTP(phone);
+        console.log('[auth.service::resendOTP] EXIT', { success: result.success });
+        return result.success
+            ? { success: true, message: `${result.message}. Please enter the 6-digit code.` }
+            : result;
     }
     async verifyOTP(phone, code) {
         console.log('[auth.service::verifyOTP] ENTER', { phone, otpPresent: !!code });

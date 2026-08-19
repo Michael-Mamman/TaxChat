@@ -295,8 +295,34 @@ class FlowRouterService {
         );
       }
     } else if (awaiting === "otp") {
+      const code = input.trim();
+
+      // Let the taxpayer ask for another code. Without this an expired or
+      // undelivered code is a dead end: every further message is read as a
+      // verification attempt and answered with "No active OTP found".
+      if (/^(resend|resend code|new code|send again)$/i.test(code)) {
+        console.log('[flowRouter.service::handleAuthInput] branch: OTP resend requested');
+        const resent = await authService.resendOTP(phone);
+        await whatsappService.sendMessage(phone, resent.message);
+        console.log('[flowRouter.service::handleAuthInput] EXIT', { branch: 'otp-resend' });
+        return;
+      }
+
+      // Anything that is not six digits is far more likely to be the taxpayer
+      // talking than a verification attempt.
+      if (!/^\d{6}$/.test(code)) {
+        console.log('[flowRouter.service::handleAuthInput] branch: input is not a 6-digit code');
+        await whatsappService.sendMessage(
+          phone,
+          "I'm waiting for the *6-digit verification code*.\n\n" +
+            "Reply *RESEND* for a new code, *MENU* to start over, or *AGENT* to speak with an officer.",
+        );
+        console.log('[flowRouter.service::handleAuthInput] EXIT', { branch: 'otp-not-a-code' });
+        return;
+      }
+
       console.log('[flowRouter.service::handleAuthInput] branch: verifying OTP');
-      const result = await authService.verifyOTP(phone, input);
+      const result = await authService.verifyOTP(phone, code);
       await whatsappService.sendMessage(phone, result.message);
 
       if (result.success) {

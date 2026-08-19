@@ -8,7 +8,7 @@ import menuService from "./menu.service.js";
 import whatsappService from "../whatsapp/whatsapp.service.js";
 import escalationService from "../escalation/escalation.service.js";
 import auditLogService from "../auditLog.service.js";
-import { ESCALATION_KEYWORDS, ESCALATION_PHRASES, MENU_KEYWORDS, GREETING_KEYWORDS, MAIN_MENU_OPTIONS, } from "../../utils/constants.js";
+import { ESCALATION_KEYWORDS, ESCALATION_PHRASES, END_ESCALATION_KEYWORDS, MENU_KEYWORDS, GREETING_KEYWORDS, MAIN_MENU_OPTIONS, } from "../../utils/constants.js";
 /** Strips surrounding punctuation so "help!" and "agent." still match exactly. */
 function normalizeForKeywords(text) {
     return text.toLowerCase().trim().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
@@ -42,8 +42,17 @@ class ConversationService {
             text,
             type: messageType,
         });
-        // If already escalated, everything the taxpayer sends goes to the officer.
+        // While escalated, messages go to the officer - but the taxpayer must be
+        // able to come back. Nothing else ends a handover: no officer workbench is
+        // connected, so returnFromEscalation is never called from the other side.
         if (convo?.is_escalated) {
+            if (messageType !== "interactive" && END_ESCALATION_KEYWORDS.includes(normalizeForKeywords(text))) {
+                console.log("[conversation.service::handleIncomingMessage] branch: ending escalation at taxpayer request");
+                await escalationService.returnFromEscalation(from, undefined, "taxpayer");
+                await this.resetAndShowMenu(from, contactName);
+                console.log("[conversation.service::handleIncomingMessage] EXIT", { reason: "escalation-ended" });
+                return;
+            }
             console.log("[conversation.service::handleIncomingMessage] branch: already escalated, forwarding");
             await escalationService.forwardToAgent(from, text);
             console.log("[conversation.service::handleIncomingMessage] EXIT", { reason: "forwarded-to-agent" });

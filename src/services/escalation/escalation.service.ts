@@ -43,7 +43,7 @@ class EscalationService {
       // Notify taxpayer
       await whatsappService.sendMessage(
         phone,
-        `You're being connected to an NRS officer. They will have the context of our conversation.\n\nReference: ${ticket.data?.reference || "N/A"}\n\nPlease wait, an officer will respond shortly. During business hours (Mon-Fri, 8AM-5PM WAT), average wait time is 5-10 minutes.`,
+        `You're being connected to an NRS officer. They will have the context of our conversation.\n\nReference: ${ticket.data?.reference || "N/A"}\n\nPlease wait, an officer will respond shortly. During business hours (Mon-Fri, 8AM-5PM WAT), average wait time is 5-10 minutes.\n\nAnything you send now goes to the officer. Type *MENU* at any time to come back to self-service.`,
       );
       console.log('[escalation.service::escalateToAgent] branch: taxpayer notified');
 
@@ -77,8 +77,18 @@ class EscalationService {
     console.log('[escalation.service::forwardToAgent] ENTER', { phone, messageLength: message?.length });
     const context = await ConversationContext.findOne({ phone });
     if (!context?.escalation_ticket_id) {
-      console.log('[escalation.service::forwardToAgent] branch: no escalation ticket on context');
-      console.log('[escalation.service::forwardToAgent] EXIT', { forwarded: false });
+      // Escalated with no ticket to forward to: the handover half-failed, and
+      // the taxpayer would otherwise send messages into a void indefinitely.
+      console.log('[escalation.service::forwardToAgent] branch: escalated but no ticket - recovering');
+      await ConversationContext.findOneAndUpdate(
+        { phone },
+        { $set: { is_escalated: false }, $unset: { escalated_to: 1, escalation_ticket_id: 1 } },
+      );
+      await whatsappService.sendMessage(
+        phone,
+        "Sorry - I lost the connection to that officer. Type *MENU* to see what I can help with, or *AGENT* to try again.",
+      );
+      console.log('[escalation.service::forwardToAgent] EXIT', { forwarded: false, recovered: true });
       return;
     }
 
@@ -89,12 +99,20 @@ class EscalationService {
       message,
       `Taxpayer (${phone})`,
     );
+
+    // Acknowledge receipt. Without this, a handover is indistinguishable from
+    // the bot having died - which is exactly how it read in testing.
+    await whatsappService.sendMessage(
+      phone,
+      "Passed to the officer handling your case. Type *MENU* to return to self-service.",
+    );
     console.log('[escalation.service::forwardToAgent] EXIT', { forwarded: true });
   }
 
   async returnFromEscalation(
     phone: string,
     resolution?: string,
+    endedBy: "officer" | "taxpayer" = "officer",
   ): Promise<void> {
     console.log('[escalation.service::returnFromEscalation] ENTER', { phone, hasResolution: !!resolution });
     await ConversationContext.findOneAndUpdate(
@@ -107,7 +125,10 @@ class EscalationService {
     console.log('[escalation.service::returnFromEscalation] branch: context cleared');
 
     let message: string;
-    if (resolution) {
+    if (endedBy === "taxpayer") {
+      console.log('[escalation.service::returnFromEscalation] branch: ended by taxpayer');
+      message = "You're back with TaxChat. Your request stays open with the officer, and they'll still be in touch.";
+    } else if (resolution) {
       console.log('[escalation.service::returnFromEscalation] branch: resolution present');
       message = `Your query has been resolved: ${resolution}\n\nIs there anything else I can help with? Type MENU to see all services.`;
     } else {
