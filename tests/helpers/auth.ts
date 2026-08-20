@@ -44,3 +44,38 @@ export async function completeTier2(bot: Bot): Promise<Reply[]> {
   await completeTier1(bot);
   return bot.say(TEST_NIN);
 }
+
+/**
+ * Answer whatever the auth sub-flow is currently asking for, until it lets go.
+ *
+ * The ladder is not the same for every flow: Tier 1 and 2 start at TIN and OTP,
+ * while Tier 3 (TIN registration) starts at NIN, because the taxpayer has no
+ * TIN yet. Reading the awaited step keeps callers out of that detail.
+ */
+export async function completeAuth(bot: Bot, maxSteps = 6): Promise<Reply[]> {
+  const { default: ConversationContext } = await import(
+    "../../src/models/conversationContext.model.js"
+  );
+
+  let replies: Reply[] = [];
+  for (let i = 0; i < maxSteps; i++) {
+    const ctx = await ConversationContext.findOne({ phone: bot.phone });
+    if (ctx?.current_flow !== "auth") return replies;
+
+    switch (ctx.awaiting_input) {
+      case "tin":
+        replies = await bot.say(TEST_TIN);
+        break;
+      case "otp":
+        replies = await bot.say(await currentOtp(bot.phone));
+        break;
+      case "nin_bvn":
+      case "kyc":
+        replies = await bot.say(TEST_NIN);
+        break;
+      default:
+        return replies;
+    }
+  }
+  throw new Error(`authentication did not settle for ${bot.phone}`);
+}

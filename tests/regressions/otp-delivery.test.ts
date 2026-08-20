@@ -97,3 +97,56 @@ describe("TIN format", () => {
     expect(reply.some((r) => /verification code/i.test(r.body))).toBe(true);
   });
 });
+
+describe("TIN registration authentication", () => {
+  beforeAll(connectTestDb);
+  beforeEach(async () => {
+    await resetDb();
+    resetAI();
+  });
+  afterAll(disconnectTestDb);
+
+  it("does not ask for a TIN in order to issue one", async () => {
+    const bot = new Bot("2348030001401");
+
+    // BRD §3.2 puts TIN registration at Tier 3, whose method is NIN plus a
+    // facial match - deliberately not TIN and OTP, because the taxpayer
+    // registering has no TIN to give.
+    const reply = only(await bot.pick("tin_registration"));
+
+    expect(reply.body).not.toMatch(/enter your TIN/i);
+    expect(reply.body).toMatch(/NIN|BVN/i);
+  });
+
+  it("reaches the registration flow after identity verification", async () => {
+    const bot = new Bot("2348030001402");
+    await bot.pick("tin_registration");
+
+    await bot.say("12345678901");          // NIN
+    const replies = await bot.say("12345678901"); // KYC
+
+    expect(replies.some((r) => /registration/i.test(r.body))).toBe(true);
+  });
+});
+
+describe("identity format checks", () => {
+  beforeAll(connectTestDb);
+  beforeEach(async () => {
+    await resetDb();
+    resetAI();
+  });
+  afterAll(disconnectTestDb);
+
+  it("rejects a NIN that is not 11 digits", async () => {
+    const bot = new Bot("2348030001501");
+    await bot.pick("tin_registration");
+
+    // The stub approves whatever it is given, so the format check has to be
+    // ours: a 10-digit number was previously accepted as a NIN.
+    const reply = only(await bot.say("2266383733"));
+    expect(reply.body).toMatch(/11-digit/);
+
+    const ok = await bot.say("12345678901");
+    expect(ok.some((r) => /verified/i.test(r.body))).toBe(true);
+  });
+});

@@ -12,7 +12,10 @@ const TIER_REQUIREMENTS: TierRequirement[] = [
   { tier: 0, requires_tin: false, requires_otp: false, requires_nin_or_bvn: false, requires_kyc: false },
   { tier: 1, requires_tin: true, requires_otp: true, requires_nin_or_bvn: false, requires_kyc: false },
   { tier: 2, requires_tin: true, requires_otp: true, requires_nin_or_bvn: true, requires_kyc: false },
-  { tier: 3, requires_tin: true, requires_otp: true, requires_nin_or_bvn: true, requires_kyc: true },
+  // BRD 3.2: Tier 3 is "NIN verification with biographic data pull and facial
+  // match on uploaded ID photo". It deliberately does not include TIN or OTP -
+  // its only use is TIN registration, by someone who has no TIN to give.
+  { tier: 3, requires_tin: false, requires_otp: false, requires_nin_or_bvn: true, requires_kyc: true },
 ];
 
 const FLOW_AUTH_MAP: Record<FlowName, number> = {
@@ -255,8 +258,13 @@ class AuthService {
     }
 
     console.log('[auth.service::verifyIdentity] branch: upgrading session to TIER_2');
-    // Upgrade to Tier 2
-    await sessionService.upgradeSession(phone, AuthTier.TIER_2);
+    // Open or raise the session. A Tier 3 taxpayer reaches here without having
+    // gone through OTP, so there may be no session to upgrade yet.
+    const upgraded = await sessionService.upgradeSession(phone, AuthTier.TIER_2);
+    if (!upgraded) {
+      console.log('[auth.service::verifyIdentity] branch: no existing session - creating one');
+      await sessionService.createSession(phone, AuthTier.TIER_2);
+    }
 
     console.log('[auth.service::verifyIdentity] EXIT', { success: true, tier: AuthTier.TIER_2 });
     return {
@@ -305,8 +313,12 @@ class AuthService {
     );
 
     console.log('[auth.service::verifyKYC] branch: upgrading session to TIER_3');
-    // Upgrade to Tier 3
-    await sessionService.upgradeSession(phone, AuthTier.TIER_3);
+    // Open or raise the session, as above.
+    const raised = await sessionService.upgradeSession(phone, AuthTier.TIER_3);
+    if (!raised) {
+      console.log('[auth.service::verifyKYC] branch: no existing session - creating one');
+      await sessionService.createSession(phone, AuthTier.TIER_3);
+    }
 
     console.log('[auth.service::verifyKYC] EXIT', { success: true, tier: AuthTier.TIER_3 });
     return {

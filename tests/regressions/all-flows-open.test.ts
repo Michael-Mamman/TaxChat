@@ -10,7 +10,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import ConversationContext from "../../src/models/conversationContext.model.js";
 import { connectTestDb, resetDb, disconnectTestDb } from "../helpers/db.js";
 import { Bot, only } from "../helpers/bot.js";
-import { completeTier1 } from "../helpers/auth.js";
+import { completeAuth } from "../helpers/auth.js";
 import { resetAI } from "../helpers/ai.js";
 import { MAIN_MENU_OPTIONS } from "../../src/utils/constants.js";
 import { WA } from "../../src/services/whatsapp/whatsapp.limits.js";
@@ -32,8 +32,10 @@ describe("every flow opens cleanly", () => {
     let opening = first;
     const ctx = await ConversationContext.findOne({ phone: bot.phone });
     if (ctx?.current_flow === "auth") {
-      expect(first.body).toMatch(/TIN/i);
-      const resumed = await completeTier1(bot);
+      // Tier 1 and 2 open on TIN; Tier 3 (TIN registration) opens on NIN/BVN,
+      // since the taxpayer has no TIN yet.
+      expect(first.body).toMatch(/TIN|NIN|BVN/i);
+      const resumed = await completeAuth(bot);
       // The flow resumes during OTP verification; its opening message is the
       // last thing sent on that turn, after the "Verified" acknowledgement.
       opening = resumed[resumed.length - 1]!;
