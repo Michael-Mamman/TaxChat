@@ -69,8 +69,8 @@ class TaxClearanceFlow {
                         console.log('[taxClearance.flow::handleInput] branch: download TCC');
                         console.log('[taxClearance.flow::handleInput] EXIT', { flow_complete: true });
                         return {
-                            message: "Your Tax Clearance Certificate is being generated.\n\n" +
-                                "You will receive it as a PDF document in this chat shortly.\n\n" +
+                            message: "Your Tax Clearance Certificate has been approved.\n\n" +
+                                "Quote the reference below to collect it, or to have it re-issued at your tax office.\n\n" +
                                 `*TCC Reference:* TCC-${Date.now().toString().slice(-8)}\n` +
                                 `*Valid Until:* 31st December ${new Date().getFullYear()}\n\n` +
                                 "Is there anything else I can help you with?",
