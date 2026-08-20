@@ -68,12 +68,38 @@ class FilingSupportFlow {
     };
   }
 
+  /** Tax types this flow supports, as they appear in the selection list. */
+  private static readonly TAX_TYPES = ["CIT", "VAT", "PAYE", "WHT"] as const;
+
   async handleInput(
     phone: string,
     input: string,
     step: number,
     data: Record<string, unknown>,
   ): Promise<FlowStepResult> {
+    // WhatsApp lets the taxpayer reply to any earlier message, so a tax-type
+    // row can arrive at any step. Treat it as switching tax type rather than
+    // as an answer to the current question - otherwise selecting VAT while
+    // sitting on the CIT result silently keeps CIT and hands out the CIT guide.
+    const selected = input.trim().toUpperCase();
+    if (
+      (FilingSupportFlow.TAX_TYPES as readonly string[]).includes(selected) &&
+      data.tax_type !== selected &&
+      step > 0
+    ) {
+      console.log('[filingSupport.flow::handleInput] branch: tax type switched mid-flow', { from: data.tax_type, to: selected });
+      data.tax_type = selected;
+      delete data.tin;
+      return {
+        message:
+          `Switching to *${selected}*.\n\n` +
+          "Please provide your *TIN (Taxpayer Identification Number)* so I can check your filing status:\n\n" +
+          "_Your TIN is the 10-digit number on your tax documents._",
+        next_step: 1,
+        awaiting_input: "tin",
+      };
+    }
+
     console.log('[filingSupport.flow::handleInput] ENTER', { phone, step, inputLen: input.length, inputPreview: input.slice(0, 3) + '***' });
     switch (step) {
       // ------------------------------------------------------------------
