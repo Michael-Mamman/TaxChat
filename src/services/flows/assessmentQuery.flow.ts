@@ -226,9 +226,10 @@ class AssessmentQueryFlow {
           console.log('[assessmentQuery.flow::handleInput] EXIT', { flow_complete: true });
           return {
             message:
-              "I'll redirect you to the Payment Confirmation service.\n\n" +
+              "Let's confirm that payment.\n\n" +
               "_You can also say \"confirm payment\" at any time._",
             flow_complete: true,
+            next_flow: "payment_confirmation",
           };
         }
 

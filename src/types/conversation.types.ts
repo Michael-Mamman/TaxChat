@@ -43,6 +43,14 @@ export interface FlowStepResult {
   next_step?: number;
   awaiting_input?: string;
   flow_complete?: boolean;
+  /**
+   * Hand the taxpayer straight to another flow.
+   *
+   * Several flows offer to move the taxpayer on - "Pay Outstanding" from a TCC
+   * compliance gap, "Register for TIN" after a failed lookup. Saying so without
+   * this leaves them at a dead end holding a message that promised a redirect.
+   */
+  next_flow?: FlowName;
   requires_auth_tier?: number;
   escalate?: boolean;
   escalation_reason?: string;

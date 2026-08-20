@@ -248,6 +248,14 @@ class FlowRouterService {
         },
       );
 
+      // Hand over to the next flow if one was named, rather than ending here.
+      if (result.next_flow && FLOW_HANDLERS[result.next_flow]) {
+        console.log('[flowRouter.service::processFlowResult] branch: chaining to next flow', { from: flowName, to: result.next_flow });
+        await this.startFlow(phone, result.next_flow);
+        console.log('[flowRouter.service::processFlowResult] EXIT', { chainedTo: result.next_flow });
+        return;
+      }
+
       // Only add a closing line if the flow did not write its own. Twenty of
       // the flows' completion messages already end with "Is there anything
       // else...", and appending this on top sends the taxpayer the same
