@@ -1,0 +1,85 @@
+import type { ResourceWithOptions } from "adminjs";
+import Taxpayer from "../../models/taxpayer.model.js";
+import { NAV } from "../navigation.js";
+import { AUTH_TIER_VALUES, detailOnly, readOnly, readOnlyListed, sensitive } from "./shared.js";
+
+console.log("[taxpayer.resource::module] ENTER", { loading: true });
+
+const TaxpayerResource: ResourceWithOptions = {
+  resource: Taxpayer,
+  options: {
+    navigation: NAV.TAXPAYERS,
+    listProperties: [
+      "phone",
+      "tin",
+      "first_name",
+      "last_name",
+      "auth_tier",
+      "is_verified",
+      "createdAt",
+    ],
+    filterProperties: [
+      "phone",
+      "tin",
+      "first_name",
+      "last_name",
+      "email",
+      "auth_tier",
+      "is_verified",
+      "tax_profile.compliance_status",
+      "tax_profile.state",
+      "preferred_language",
+      "opted_in_notifications",
+      "createdAt",
+    ],
+    editProperties: [
+      "phone",
+      "tin",
+      "nin",
+      "bvn",
+      "first_name",
+      "last_name",
+      "name",
+      "date_of_birth",
+      "gender",
+      "email",
+      "residential_address",
+      "business_address",
+      "rc_number",
+      "business_name",
+      "employer.name",
+      "employer.tin",
+      "auth_tier",
+      "is_verified",
+      "verification_date",
+      "tax_profile.taxpayer_type",
+      "tax_profile.tax_office",
+      "tax_profile.jurisdiction",
+      "tax_profile.lga",
+      "tax_profile.state",
+      "tax_profile.filing_frequency",
+      "tax_profile.tax_types",
+      "tax_profile.compliance_status",
+      "tax_profile.last_filing_date",
+      "tax_profile.outstanding_balance",
+      "preferred_language",
+      "opted_in_notifications",
+      "metadata",
+    ],
+    sort: { sortBy: "createdAt", direction: "desc" },
+    properties: {
+      auth_tier: { availableValues: AUTH_TIER_VALUES },
+      // National ID and bank verification numbers stay off list/filter views.
+      nin: sensitive,
+      bvn: sensitive,
+      metadata: detailOnly,
+      last_interaction: readOnly,
+      createdAt: readOnlyListed,
+      updatedAt: readOnly,
+    },
+  },
+};
+
+console.log("[taxpayer.resource::module] EXIT", { navigation: NAV.TAXPAYERS.name });
+
+export default TaxpayerResource;

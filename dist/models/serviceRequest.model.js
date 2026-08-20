@@ -59,13 +59,20 @@ const ServiceRequestSchema = new Schema({
     escalation_count: { type: Number, default: 0 },
     metadata: { type: Schema.Types.Mixed },
 }, { timestamps: true });
+/**
+ * Builds a reference number in the TC-YYYYMMDD-NNNN format. Exported so the
+ * admin panel can fill the field in before mongoose validates a new record.
+ */
+export function generateReferenceNumber() {
+    const date = new Date();
+    const dateStr = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+    const rand = Math.floor(1000 + Math.random() * 9000);
+    return `TC-${dateStr}-${rand}`;
+}
 // Auto-generate reference number before save
 ServiceRequestSchema.pre("save", function (next) {
     if (!this.reference_number) {
-        const date = new Date();
-        const dateStr = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
-        const rand = Math.floor(1000 + Math.random() * 9000);
-        this.reference_number = `TC-${dateStr}-${rand}`;
+        this.reference_number = generateReferenceNumber();
     }
     next();
 });
