@@ -159,12 +159,37 @@ class FlowRouterService {
     const flowData: Record<string, unknown> = {
       ...((context.flow_data as Record<string, unknown>) ?? {}),
     };
-    const result = await handler.handleInput(
-      phone,
-      input,
-      context.current_step ?? 0,
-      flowData,
-    );
+    let result: FlowStepResult;
+    try {
+      result = await handler.handleInput(
+        phone,
+        input,
+        context.current_step ?? 0,
+        flowData,
+      );
+    } catch (err) {
+      // A flow that throws must not become silence. The webhook handler
+      // swallows the error and returns 200, so without this the taxpayer sends
+      // a message and simply never hears back - which is how several handler
+      // crashes went unnoticed until someone tested by hand.
+      console.error('[flowRouter.service::continueFlow] flow threw', {
+        flowName,
+        step: context.current_step ?? 0,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      await auditLogService.log(phone, "flow_error", {
+        flow: flowName,
+        step: context.current_step ?? 0,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      await whatsappService.sendMessage(
+        phone,
+        "Sorry - something went wrong on my side with that step.\n\n" +
+          "Type *MENU* to start again, or *AGENT* to speak with an officer.",
+      );
+      console.log('[flowRouter.service::continueFlow] EXIT', { error: true });
+      return;
+    }
 
     await this.processFlowResult(phone, flowName, result, flowData);
     console.log('[flowRouter.service::continueFlow] EXIT', { flowName, nextStep: result.next_step, flow_complete: result.flow_complete });
