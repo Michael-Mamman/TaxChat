@@ -2,17 +2,11 @@ import React, { useEffect, useState } from "react";
 import { Box, H2, Text, Loader } from "@adminjs/design-system";
 import { ApiClient } from "adminjs";
 import Logo from "../components/logo.js";
-
-type DashboardStats = {
-  taxpayers: number;
-  verifiedTaxpayers: number;
-  openRequests: number;
-  totalRequests: number;
-  activeSessions: number;
-  pendingNotifications: number;
-  escalatedConversations: number;
-  auditEvents: number;
-};
+import Panel from "../components/charts/panel.js";
+import BarChart from "../components/charts/bar-chart.js";
+import AreaChart from "../components/charts/area-chart.js";
+import RecentTable from "../components/charts/recent-table.js";
+import type { DashboardStats } from "./stats-types.js";
 
 const api = new ApiClient();
 
@@ -87,6 +81,24 @@ const StatCard: React.FC<Card> = ({ label, value, hint, href }) => (
   </Box>
 );
 
+/** Surfaces the window total and peak in text, so neither needs a hover. */
+const activitySubtitle = (s: DashboardStats): string => {
+  const total = s.activityByDay.reduce((sum, d) => sum + d.value, 0);
+  const peak = s.activityByDay.reduce((b, d) => (d.value > b.value ? d : b), s.activityByDay[0] ?? { date: "", value: 0 });
+  if (!total) return "Audit events per day, last 14 days";
+  const day = peak.date ? new Date(`${peak.date}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : "";
+  return `Audit events per day, last 14 days — ${total.toLocaleString()} total, peak ${peak.value.toLocaleString()} on ${day}`;
+};
+
+const grid = (min: number): React.CSSProperties => ({
+  display: "grid",
+  gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, ${min}px), 1fr))`,
+  gap: "16px",
+  // Without this, every panel in a row stretches to the tallest one and short
+  // charts sit in a half-empty card.
+  alignItems: "start",
+});
+
 const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -116,17 +128,40 @@ const Dashboard: React.FC = () => {
       {!stats && !error ? <Loader /> : null}
 
       {stats ? (
-        <Box
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
-            gap: "16px",
-          }}
-        >
-          {buildCards(stats).map((card) => (
-            <StatCard key={card.label} {...card} />
-          ))}
-        </Box>
+        <>
+          <Box style={grid(240)}>
+            {buildCards(stats).map((c) => (
+              <StatCard key={c.label} {...c} />
+            ))}
+          </Box>
+
+          <Box mt="xl">
+            <Panel title="Activity" subtitle={activitySubtitle(stats)}>
+              <AreaChart data={stats.activityByDay} />
+            </Panel>
+          </Box>
+
+          <Box mt="xl" style={grid(420)}>
+            <Panel title="Service requests by status" subtitle="All requests on record">
+              <BarChart data={stats.requestsByStatus} />
+            </Panel>
+            <Panel title="Service requests by type" subtitle="Top categories">
+              <BarChart data={stats.requestsByType} />
+            </Panel>
+            <Panel title="Taxpayers by authentication tier" subtitle="Tier 0 unauthenticated → Tier 3 full KYC">
+              <BarChart data={stats.taxpayersByTier} ordinal />
+            </Panel>
+            <Panel title="Notifications by delivery status" subtitle="All notifications on record">
+              <BarChart data={stats.notificationsByStatus} />
+            </Panel>
+          </Box>
+
+          <Box mt="xl" mb="xl">
+            <Panel title="Recent service requests" subtitle="Most recently raised">
+              <RecentTable rows={stats.recentRequests} />
+            </Panel>
+          </Box>
+        </>
       ) : null}
     </Box>
   );
