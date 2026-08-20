@@ -275,8 +275,16 @@ class FlowRouterService {
             // Determine if NIN or BVN based on format
             // NIN and BVN are both 11 digits, so length cannot tell them apart. Try
             // NIN first and fall back to BVN rather than silently never checking BVN.
+            const identifier = input.replace(/[\s-]/g, "");
+            if (!/^\d{11}$/.test(identifier)) {
+                console.log('[flowRouter.service::handleAuthInput] branch: NIN/BVN failed format check', { length: identifier.length });
+                await whatsappService.sendMessage(phone, "A NIN and a BVN are both *11-digit numbers*. Please check and re-enter.\n\n" +
+                    "_Type *MENU* to start over, or *AGENT* to speak with an officer._");
+                console.log('[flowRouter.service::handleAuthInput] EXIT', { branch: 'identity-invalid' });
+                return;
+            }
             const type = "nin";
-            let result = await authService.verifyIdentity(phone, type, input);
+            let result = await authService.verifyIdentity(phone, type, identifier);
             if (!result.success) {
                 console.log('[flowRouter.service::handleAuthInput] branch: NIN failed, retrying as BVN');
                 result = await authService.verifyIdentity(phone, "bvn", input);
@@ -292,6 +300,14 @@ class FlowRouterService {
             }
         }
         else if (awaiting === "kyc") {
+            const kycNin = input.replace(/[\s-]/g, "");
+            if (!/^\d{11}$/.test(kycNin)) {
+                console.log('[flowRouter.service::handleAuthInput] branch: KYC NIN failed format check', { length: kycNin.length });
+                await whatsappService.sendMessage(phone, "A NIN is an *11-digit number*. Please check and re-enter it.\n\n" +
+                    "_Type *MENU* to start over, or *AGENT* to speak with an officer._");
+                console.log('[flowRouter.service::handleAuthInput] EXIT', { branch: 'kyc-invalid' });
+                return;
+            }
             console.log('[flowRouter.service::handleAuthInput] branch: verifying KYC (NIN)');
             const result = await authService.verifyKYC(phone, input);
             await whatsappService.sendMessage(phone, result.message);

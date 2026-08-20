@@ -356,7 +356,7 @@ class TinRegistrationFlow {
                     message: `Your TIN registration has been submitted successfully!\n\n` +
                         `*Ticket Reference:* ${ticketResult.data.reference}\n` +
                         `*Estimated Processing Time:* 2-3 business days\n\n` +
-                        `You will receive an SMS notification once your TIN is generated.\n\n` +
+                        `I'll message you here as soon as your TIN is generated.\n\n` +
                         `You can check your application status anytime by saying:\n` +
                         `"_Check status of ${ticketResult.data.reference}_"`,
                     flow_complete: true,
