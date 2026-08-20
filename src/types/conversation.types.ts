@@ -35,8 +35,17 @@ export interface FlowStepResult {
     cta: string;
     screen: string;
   };
+  /**
+   * A generated file to send to the taxpayer.
+   *
+   * The flow produces the file, because that is where the data lives; the
+   * router uploads, sends, and then removes it. Previously this carried a
+   * media_id, which meant the flow had to do the uploading - and no flow ever
+   * did, so the field went unused and the certificates were never delivered.
+   */
   document?: {
-    media_id: string;
+    /** Absolute path to the generated file. Removed after sending. */
+    path: string;
     filename: string;
     caption?: string;
   };
