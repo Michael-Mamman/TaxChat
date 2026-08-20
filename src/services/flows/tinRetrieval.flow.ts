@@ -336,8 +336,8 @@ class TinRetrievalFlow {
           console.log('[tinRetrieval.flow::handleInput] EXIT', { flow_complete: true });
           return {
             message:
-              `Your TIN certificate for *${data.taxpayer_name as string}* is being generated.\n\n` +
-              "You will receive the document in this chat shortly.\n\n" +
+              `Your TIN certificate for *${data.taxpayer_name as string}* has been requested.\n\n` +
+              "Quote your TIN at your tax office to collect the certificate.\n\n" +
               "_Please note: This is an unmasked document. Keep it secure._\n\n" +
               "Is there anything else I can help you with?",
             flow_complete: true,

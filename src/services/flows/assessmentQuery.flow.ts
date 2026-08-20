@@ -280,7 +280,7 @@ class AssessmentQueryFlow {
           console.log('[assessmentQuery.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'post_download_action' });
           return {
             message:
-              "Your assessment statement is being generated and will be sent as a PDF in this chat shortly.\n\n" +
+              "I've requested your assessment statement. Quote your TIN at your tax office to collect it.\n\n" +
               "Is there anything else I can help you with?",
             buttons: [
               { id: "dispute", title: "Dispute Assessment" },
