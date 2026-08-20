@@ -166,8 +166,13 @@ class FlowRouterService {
                 $set: { flow_data: {}, last_message_at: new Date() },
                 $unset: { current_flow: 1, current_step: 1, awaiting_input: 1 },
             });
-            // Offer to continue
-            await whatsappService.sendMessage(phone, "Is there anything else I can help with? Type MENU to see all services.");
+            // Only add a closing line if the flow did not write its own. Twenty of
+            // the flows' completion messages already end with "Is there anything
+            // else...", and appending this on top sends the taxpayer the same
+            // question twice at the end of every single flow.
+            if (!result.message) {
+                await whatsappService.sendMessage(phone, "Is there anything else I can help with? Type MENU to see all services.");
+            }
         }
         else {
             console.log('[flowRouter.service::processFlowResult] branch: updating step/awaiting_input', { next_step: result.next_step, awaiting_input: result.awaiting_input });
@@ -195,8 +200,19 @@ class FlowRouterService {
         console.log('[flowRouter.service::handleAuthInput] ENTER', { phone, awaiting: context.awaiting_input, inputLen: input.length });
         const awaiting = context.awaiting_input;
         if (awaiting === "tin") {
+            // Validate before calling out. The flows all require a 10-digit TIN, so
+            // accepting anything here means a TIN that authenticates fine is then
+            // rejected by the very flow it unlocked.
+            const tin = input.replace(/[\s-]/g, "");
+            if (!/^\d{10}$/.test(tin)) {
+                console.log('[flowRouter.service::handleAuthInput] branch: TIN failed format check', { length: tin.length });
+                await whatsappService.sendMessage(phone, "A TIN is a *10-digit number*. Please check and re-enter it.\n\n" +
+                    "_You can find it on previous tax documents. Type *MENU* to start over, or *AGENT* to speak with an officer._");
+                console.log('[flowRouter.service::handleAuthInput] EXIT', { branch: 'tin-invalid' });
+                return;
+            }
             console.log('[flowRouter.service::handleAuthInput] branch: verifying TIN');
-            const result = await authService.verifyTIN(phone, input);
+            const result = await authService.verifyTIN(phone, tin);
             await whatsappService.sendMessage(phone, result.message);
             if (result.requires_next === "otp") {
                 console.log('[flowRouter.service::handleAuthInput] branch: TIN accepted - awaiting OTP');
