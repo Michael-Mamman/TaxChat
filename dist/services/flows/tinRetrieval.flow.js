@@ -220,8 +220,9 @@ class TinRetrievalFlow {
                     console.log('[tinRetrieval.flow::handleInput] branch: register redirect');
                     console.log('[tinRetrieval.flow::handleInput] EXIT', { flow_complete: true });
                     return {
-                        message: "I'll redirect you to our TIN Registration service. One moment...",
+                        message: "Let's get you registered for a TIN.",
                         flow_complete: true,
+                        next_flow: "tin_registration",
                     };
                 }
                 // Handle multiple-match selection

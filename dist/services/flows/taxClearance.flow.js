@@ -12,13 +12,13 @@ import itsmService from "../integrations/itsm.service.js";
  *   2 - Offer resolution pathways for non-compliant taxpayers
  */
 class TaxClearanceFlow {
-    async start(phone, entities) {
+    async start(phone, entities, data = {}) {
         console.log('[taxClearance.flow::start] ENTER', { phone, entityKeys: entities ? Object.keys(entities) : [] });
         // If TIN was already extracted or available from session
         if (entities?.tin) {
             console.log('[taxClearance.flow::start] branch: entities.tin provided');
             console.log('[taxClearance.flow::start] EXIT', { dispatched: 'checkCompliance' });
-            return this.checkCompliance(phone, entities.tin);
+            return this.checkCompliance(phone, entities.tin, data);
         }
         console.log('[taxClearance.flow::start] branch: default - ask TIN');
         console.log('[taxClearance.flow::start] EXIT', { next_step: 0, awaiting_input: 'tin' });
@@ -54,7 +54,7 @@ class TaxClearanceFlow {
                 data.tin = tin;
                 console.log('[taxClearance.flow::handleInput] branch: valid TIN');
                 console.log('[taxClearance.flow::handleInput] EXIT', { dispatched: 'checkCompliance' });
-                return this.checkCompliance(phone, tin);
+                return this.checkCompliance(phone, tin, data);
             }
             // ------------------------------------------------------------------
             // Step 1: Handle compliant / non-compliant result
@@ -194,18 +194,20 @@ class TaxClearanceFlow {
                     console.log('[taxClearance.flow::handleInput] branch: confirm_payment');
                     console.log('[taxClearance.flow::handleInput] EXIT', { flow_complete: true });
                     return {
-                        message: "I'll redirect you to Payment Confirmation. One moment...\n\n" +
+                        message: "Let's confirm that payment.\n\n" +
                             "_You can also say \"confirm payment\" at any time._",
                         flow_complete: true,
+                        next_flow: "payment_confirmation",
                     };
                 }
                 if (choice === "filing_help" || choice === "help me file") {
                     console.log('[taxClearance.flow::handleInput] branch: filing_help');
                     console.log('[taxClearance.flow::handleInput] EXIT', { flow_complete: true });
                     return {
-                        message: "I'll redirect you to our Filing Support service. One moment...\n\n" +
+                        message: "Let's get those returns filed.\n\n" +
                             "_You can also say \"help me file\" at any time._",
                         flow_complete: true,
+                        next_flow: "filing_support",
                     };
                 }
                 if (choice === "done" || choice === "i'll pay later" || choice === "i'll file myself") {
@@ -241,7 +243,7 @@ class TaxClearanceFlow {
         }
     }
     /** Check compliance and return the appropriate step result */
-    async checkCompliance(phone, tin) {
+    async checkCompliance(phone, tin, data) {
         console.log('[taxClearance.flow::checkCompliance] ENTER', { phone, tinPreview: tin.slice(0, 3) + '***' });
         const compliance = await taxPromaxService.getComplianceStatus(tin);
         if (!compliance.success || !compliance.data) {
@@ -302,14 +304,13 @@ class TaxClearanceFlow {
                     .join("\n") +
                 `\n  Total: *NGN ${totalPenalties.toLocaleString()}*`);
         }
-        // Store data for subsequent steps
-        const resultData = {
-            tin,
-            is_compliant: false,
-            overdue_filings: overdueFilings,
-            outstanding_liabilities: outstandingAssessments,
-            outstanding_penalties: outstandingPenalties,
-        };
+        // Record what was found. Later steps read these back, so they must go onto
+        // the flow-data object rather than a local that is discarded on return.
+        data.tin = tin;
+        data.is_compliant = false;
+        data.overdue_filings = overdueFilings;
+        data.outstanding_liabilities = outstandingAssessments;
+        data.outstanding_penalties = outstandingPenalties;
         console.log('[taxClearance.flow::checkCompliance] EXIT', { next_step: 1, awaiting_input: 'resolution_choice' });
         return {
             message: `Your tax account (TIN: ${tin.slice(0, 3)}****${tin.slice(-2)}) has *compliance gaps* that must be resolved before a TCC can be issued.\n\n` +

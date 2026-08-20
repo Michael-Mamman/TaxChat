@@ -61,12 +61,18 @@ class PaymentConfirmationFlow {
                 }
                 // Validate reference format (flexible)
                 const reference = trimmed.replace(/\s/g, "").toUpperCase();
-                if (reference.length < 6) {
-                    console.log('[paymentConfirmation.flow::handleInput] branch: reference too short');
+                // A payment reference is digits, optionally prefixed with RRR. Accepting
+                // any string of six-plus characters meant a stray tap such as
+                // "FILE_RETURNS" was looked up and came back as a confirmed payment.
+                const digits = reference.replace(/^RRR[-\s]?/i, "").replace(/[-\s]/g, "");
+                if (!/^\d{10,20}$/.test(digits)) {
+                    console.log('[paymentConfirmation.flow::handleInput] branch: reference failed format check');
                     console.log('[paymentConfirmation.flow::handleInput] EXIT', { next_step: 0, awaiting_input: 'payment_reference' });
                     return {
-                        message: "That reference seems too short. A payment reference is typically *12 or more characters*.\n\n" +
-                            "Please re-enter the reference, or send a photo of your receipt:",
+                        message: "That doesn't look like a payment reference.\n\n" +
+                            "An *RRR* is a 12-digit number, sometimes written as *RRR-123456789012*. " +
+                            "You can also send a photo of your receipt.\n\n" +
+                            "Please re-enter it, or type *MENU* to start over:",
                         next_step: 0,
                         awaiting_input: "payment_reference",
                     };
