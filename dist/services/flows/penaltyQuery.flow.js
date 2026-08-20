@@ -160,7 +160,19 @@ class PenaltyQueryFlow {
                 // Handle penalty detail view actions
                 if (trimmed === "pay" || trimmed === "pay this penalty") {
                     console.log('[penaltyQuery.flow::handleInput] branch: pay single penalty');
-                    const penalty = data.selected_penalty;
+                    const listed = data.penalties;
+                    const penalty = data.selected_penalty
+                        ?? (listed?.length === 1 ? listed[0] : undefined);
+                    // Reached by replying to an earlier message without picking one.
+                    if (!penalty) {
+                        console.log('[penaltyQuery.flow::handleInput] branch: pay requested with no penalty selected');
+                        return {
+                            message: "Which penalty would you like to pay?\n\n" +
+                                "Reply with its number from the list above, or type *all* to pay everything outstanding:",
+                            next_step: 1,
+                            awaiting_input: "penalty_selection",
+                        };
+                    }
                     console.log('[penaltyQuery.flow::handleInput] EXIT', { flow_complete: true });
                     return {
                         message: `To pay this penalty of *NGN ${penalty.amount.toLocaleString()}*:\n\n` +
@@ -389,9 +401,33 @@ class PenaltyQueryFlow {
         const tin = data.tin ?? "N/A";
         const penalty = data.selected_penalty;
         const penalties = data.penalties;
+        // A single-penalty waiver with nothing selected produces a ticket reading
+        // "Single penalty: N/A" for "NGN 0", which is worthless to the officer who
+        // receives it. It happens when the taxpayer reaches the waiver branch by
+        // replying to an earlier message rather than working straight down.
+        if (waiverScope !== "all" && !penalty) {
+            if (penalties && penalties.length === 1) {
+                console.log('[penaltyQuery.flow::submitWaiverTicket] branch: one penalty on account - selecting it');
+                data.selected_penalty = penalties[0];
+            }
+            else {
+                console.log('[penaltyQuery.flow::submitWaiverTicket] branch: no penalty selected - asking which');
+                const listing = (penalties ?? [])
+                    .map((p, i) => `${i + 1}. NGN ${p.amount.toLocaleString()}`)
+                    .join("\n");
+                return {
+                    message: "Which penalty would you like waived?\n\n" +
+                        listing +
+                        "\n\nReply with the number, or type *all* to request a waiver for every penalty:",
+                    next_step: 1,
+                    awaiting_input: "penalty_selection",
+                };
+            }
+        }
+        const selectedPenalty = (data.selected_penalty ?? penalty);
         const totalAmount = waiverScope === "all"
             ? penalties.reduce((s, p) => s + p.amount, 0)
-            : penalty?.amount ?? 0;
+            : selectedPenalty?.amount ?? 0;
         const groundLabels = {
             financial_hardship: "Financial Hardship",
             first_offence: "First Offence",
@@ -401,7 +437,7 @@ class PenaltyQueryFlow {
         };
         const penaltyDescription = waiverScope === "all"
             ? `All penalties on account (${penalties.length} total)`
-            : `Single penalty: ${penalty?.penalty_id ?? "N/A"}`;
+            : `Single penalty: ${selectedPenalty?.penalty_id ?? "N/A"}`;
         console.log('[penaltyQuery.flow::submitWaiverTicket] branch: creating PEN-WAIVER ticket', { totalAmount, scope: waiverScope });
         const ticketResult = await itsmService.createTicket({
             type: "PEN-WAIVER",
