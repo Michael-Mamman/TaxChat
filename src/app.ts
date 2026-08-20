@@ -1,4 +1,5 @@
 import express from "express";
+import path from "node:path";
 import AdminJS from "adminjs";
 import { buildAuthenticatedRouter } from "@adminjs/express";
 import provider from "./admin/auth-provider.js";
@@ -75,6 +76,10 @@ const start = async () => {
       console.log('[app::start] branch: non-production - AdminJS watch mode');
       admin.watch();
     }
+
+    // Brand assets for the admin panel (logo, favicon).
+    app.use("/public", express.static(path.resolve(process.cwd(), "public")));
+    console.log('[app::start] /public static assets mounted');
 
     app.use(helmet());
     console.log('[app::start] helmet middleware mounted');

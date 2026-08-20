@@ -25,6 +25,7 @@ RUN npm ci && npm cache clean --force
 # Copy source code and configuration
 COPY tsconfig.json ./
 COPY src ./src
+COPY public ./public
 
 # Build TypeScript to JavaScript
 RUN npm run build
@@ -64,6 +65,7 @@ RUN npm ci --only=production && npm cache clean --force
 
 # Copy built application from builder stage
 COPY --chown=nodejs:nodejs --from=builder /app/dist ./dist
+COPY --chown=nodejs:nodejs --from=builder /app/public ./public
 
 # Copy necessary runtime files
 COPY --chown=nodejs:nodejs eng.traineddata ./

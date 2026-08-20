@@ -8,6 +8,11 @@ const Components = {
   Dashboard: componentLoader.add("Dashboard", "./dashboard/dashboard"),
 };
 
+// Replace the stock screens that carry AdminJS's own branding.
+componentLoader.override("Login", "./components/login");
+componentLoader.override("SidebarBranding", "./components/sidebar-branding");
+console.log('[component-loader::module] branch: Login + SidebarBranding overridden');
+
 console.log('[component-loader::module] EXIT', { componentsLoaded: Object.keys(Components) });
 
 export { componentLoader, Components };

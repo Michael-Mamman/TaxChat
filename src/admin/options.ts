@@ -11,6 +11,28 @@ import AuditLog from "../models/auditLog.model.js";
 
 console.log('[options::module] ENTER', { loading: true });
 
+/** Accent sampled from the TaxChat mark. */
+const BRAND_COLORS = {
+  primary100: "#109040",
+  primary80: "#2FA85C",
+  primary60: "#5CBF80",
+  primary40: "#98D8AE",
+  primary20: "#D6EFDF",
+};
+
+/**
+ * The dark theme pins its own primary100 (#256BEE), and a theme's own colours
+ * beat `branding.theme` - so the accent has to be replaced in the theme too or
+ * dark mode keeps the stock blue.
+ */
+const brandDark = {
+  ...dark,
+  overrides: {
+    ...dark.overrides,
+    colors: { ...(dark.overrides?.colors ?? {}), ...BRAND_COLORS },
+  },
+};
+
 const OPEN_REQUEST_STATUSES = [
   ServiceRequestStatus.SUBMITTED,
   ServiceRequestStatus.IN_PROGRESS,
@@ -58,12 +80,19 @@ const options: AdminJSOptions = {
       return stats;
     },
   },
-  defaultTheme: dark.id,
-  availableThemes: [dark, light, noSidebar],
+  defaultTheme: brandDark.id,
+  availableThemes: [brandDark, light, noSidebar],
   rootPath: "/admin",
   databases: [],
   branding: {
-    companyName: "NRS TaxChat",
+    companyName: "TaxChat",
+    // Our own SidebarBranding/Login components render the logo, and these two
+    // flags stop AdminJS injecting its logotype and "made with love" footer.
+    logo: false,
+    withMadeWithLove: false,
+    favicon: "/public/brand/favicon.png",
+    // AdminJS's stock indigo accent is a big part of its out-of-the-box look.
+    theme: { colors: BRAND_COLORS },
   },
 };
 

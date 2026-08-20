@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { Box, H2, H5, Text, Loader } from "@adminjs/design-system";
+import { Box, H2, Text, Loader } from "@adminjs/design-system";
 import { ApiClient } from "adminjs";
+import Logo from "../components/logo.js";
 
 type DashboardStats = {
   taxpayers: number;
@@ -15,39 +16,55 @@ type DashboardStats = {
 
 const api = new ApiClient();
 
-const CARDS: Array<{ key: keyof DashboardStats; label: string; href: string }> = [
-  { key: "taxpayers", label: "Taxpayers", href: "/admin/resources/Taxpayer" },
-  { key: "verifiedTaxpayers", label: "Verified taxpayers", href: "/admin/resources/Taxpayer" },
-  { key: "openRequests", label: "Open service requests", href: "/admin/resources/ServiceRequest" },
+const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
+
+type Card = { label: string; value: number; hint: string; href: string };
+
+const buildCards = (s: DashboardStats): Card[] => [
   {
-    key: "totalRequests",
-    label: "Total service requests",
+    label: "Taxpayers",
+    value: s.taxpayers,
+    hint: `${s.verifiedTaxpayers.toLocaleString()} verified (${pct(s.verifiedTaxpayers, s.taxpayers)}%)`,
+    href: "/admin/resources/Taxpayer",
+  },
+  {
+    label: "Open service requests",
+    value: s.openRequests,
+    hint: `of ${s.totalRequests.toLocaleString()} raised in total`,
     href: "/admin/resources/ServiceRequest",
   },
-  { key: "activeSessions", label: "Active sessions", href: "/admin/resources/Session" },
   {
-    key: "pendingNotifications",
+    label: "Escalated conversations",
+    value: s.escalatedConversations,
+    hint: "waiting on an officer",
+    href: "/admin/resources/ConversationContext",
+  },
+  {
+    label: "Active sessions",
+    value: s.activeSessions,
+    hint: "currently authenticated",
+    href: "/admin/resources/Session",
+  },
+  {
     label: "Pending notifications",
+    value: s.pendingNotifications,
+    hint: "queued to send",
     href: "/admin/resources/Notification",
   },
   {
-    key: "escalatedConversations",
-    label: "Escalated conversations",
-    href: "/admin/resources/ConversationContext",
+    label: "Audit events",
+    value: s.auditEvents,
+    hint: "recorded to date",
+    href: "/admin/resources/AuditLog",
   },
-  { key: "auditEvents", label: "Audit events", href: "/admin/resources/AuditLog" },
 ];
 
 /**
- * `variant="white"` hardcodes the `white` colour token, which the dark theme
- * never overrides - it renders white text on a white card. Drive the surface
- * off `container`/`text` instead so the panel works in both themes.
+ * Surfaces come off `container`/`text`/`border`; the `white` token that
+ * Box variant="white" uses is not theme-aware and renders white-on-white in
+ * dark mode. H2 also ships a hardcoded margin that mt/mb props lose to.
  */
-const StatCard: React.FC<{ label: string; value: number; href: string }> = ({
-  label,
-  value,
-  href,
-}) => (
+const StatCard: React.FC<Card> = ({ label, value, hint, href }) => (
   <Box
     as="a"
     href={href}
@@ -56,15 +73,17 @@ const StatCard: React.FC<{ label: string; value: number; href: string }> = ({
     p="xl"
     border="1px solid"
     borderColor="border"
-    style={{ borderRadius: "8px", textDecoration: "none", display: "block" }}
+    style={{ borderRadius: "10px", textDecoration: "none", display: "block" }}
   >
-    <Text color="grey60" style={{ fontSize: "13px", letterSpacing: "0.02em" }}>
+    <Text color="grey60" style={{ fontSize: "13px" }}>
       {label}
     </Text>
-    {/* H2 ships a hardcoded `margin: 48px 0 32px`, which the mt/mb props lose to. */}
-    <H2 color="text" style={{ margin: "4px 0 0", lineHeight: 1.15 }}>
+    <H2 color="text" style={{ margin: "6px 0 0", lineHeight: 1.15 }}>
       {value.toLocaleString()}
     </H2>
+    <Text color="grey60" mt="sm" style={{ fontSize: "12px" }}>
+      {hint}
+    </Text>
   </Box>
 );
 
@@ -81,27 +100,17 @@ const Dashboard: React.FC = () => {
 
   return (
     <Box variant="grey">
-      <Box
-        bg="container"
-        color="text"
-        p="xl"
-        mb="xl"
-        border="1px solid"
-        borderColor="border"
-        style={{ borderRadius: "8px" }}
-      >
-        <H2 color="text" style={{ margin: "0 0 8px" }}>
-          NRS TaxChat Admin
-        </H2>
-        <Text color="grey60">
-          Manage taxpayers, sessions, service requests, notifications, conversations, and audit
-          logs from the sidebar.
-        </Text>
+      <Box mb="xxl" style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+        <Logo width={54} variant="mark" />
+        <Box>
+          <H2 color="text" style={{ margin: 0, lineHeight: 1.2 }}>
+            Overview
+          </H2>
+          <Text color="grey60" style={{ fontSize: "14px" }}>
+            Virtual Tax Office — Nigeria Revenue Service
+          </Text>
+        </Box>
       </Box>
-
-      <H5 mb="lg" color="text">
-        At a glance
-      </H5>
 
       {error ? <Text color="grey60">{error}</Text> : null}
       {!stats && !error ? <Loader /> : null}
@@ -110,12 +119,12 @@ const Dashboard: React.FC = () => {
         <Box
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
             gap: "16px",
           }}
         >
-          {CARDS.map((card) => (
-            <StatCard key={card.key} label={card.label} value={stats[card.key]} href={card.href} />
+          {buildCards(stats).map((card) => (
+            <StatCard key={card.label} {...card} />
           ))}
         </Box>
       ) : null}
