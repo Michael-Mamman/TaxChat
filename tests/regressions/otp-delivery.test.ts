@@ -68,3 +68,32 @@ describe("OTP delivery", () => {
     expect(replies.some((r) => /full name/i.test(r.body))).toBe(true);
   });
 });
+
+describe("TIN format", () => {
+  beforeAll(connectTestDb);
+  beforeEach(async () => {
+    await resetDb();
+    resetAI();
+  });
+  afterAll(disconnectTestDb);
+
+  it("rejects a badly-formed TIN at authentication, not later", async () => {
+    const bot = new Bot("2348030001101");
+    await bot.pick("penalty_query");
+
+    // 13 digits: previously accepted here, then rejected by the flow it unlocked.
+    const reply = only(await bot.say("2513103687075"));
+    expect(reply.body).toMatch(/10-digit/);
+
+    // and a well-formed one still works
+    const ok = await bot.say(TEST_TIN);
+    expect(ok.some((r) => /verification code/i.test(r.body))).toBe(true);
+  });
+
+  it("accepts a TIN written with separators", async () => {
+    const bot = new Bot("2348030001102");
+    await bot.pick("penalty_query");
+    const reply = await bot.say("123456-7890");
+    expect(reply.some((r) => /verification code/i.test(r.body))).toBe(true);
+  });
+});
