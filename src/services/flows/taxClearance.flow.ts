@@ -103,10 +103,10 @@ class TaxClearanceFlow {
             console.log('[taxClearance.flow::handleInput] EXIT', { flow_complete: true });
             return {
               message:
-                "Your Tax Clearance Certificate will be sent to your registered email.\n\n" +
+                "Your Tax Clearance Certificate has been approved.\n\n" +
                 `*TCC Reference:* TCC-${Date.now().toString().slice(-8)}\n` +
                 `*Valid Until:* 31st December ${new Date().getFullYear()}\n\n` +
-                "Please check your inbox within the next few minutes.\n\n" +
+                "Quote the reference above to collect it at your tax office.\n\n" +
                 "Is there anything else I can help you with?",
               flow_complete: true,
             };
