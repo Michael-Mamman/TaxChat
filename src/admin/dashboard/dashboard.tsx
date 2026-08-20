@@ -19,9 +19,17 @@ const CARDS: Array<{ key: keyof DashboardStats; label: string; href: string }> =
   { key: "taxpayers", label: "Taxpayers", href: "/admin/resources/Taxpayer" },
   { key: "verifiedTaxpayers", label: "Verified taxpayers", href: "/admin/resources/Taxpayer" },
   { key: "openRequests", label: "Open service requests", href: "/admin/resources/ServiceRequest" },
-  { key: "totalRequests", label: "Total service requests", href: "/admin/resources/ServiceRequest" },
+  {
+    key: "totalRequests",
+    label: "Total service requests",
+    href: "/admin/resources/ServiceRequest",
+  },
   { key: "activeSessions", label: "Active sessions", href: "/admin/resources/Session" },
-  { key: "pendingNotifications", label: "Pending notifications", href: "/admin/resources/Notification" },
+  {
+    key: "pendingNotifications",
+    label: "Pending notifications",
+    href: "/admin/resources/Notification",
+  },
   {
     key: "escalatedConversations",
     label: "Escalated conversations",
@@ -30,6 +38,11 @@ const CARDS: Array<{ key: keyof DashboardStats; label: string; href: string }> =
   { key: "auditEvents", label: "Audit events", href: "/admin/resources/AuditLog" },
 ];
 
+/**
+ * `variant="white"` hardcodes the `white` colour token, which the dark theme
+ * never overrides - it renders white text on a white card. Drive the surface
+ * off `container`/`text` instead so the panel works in both themes.
+ */
 const StatCard: React.FC<{ label: string; value: number; href: string }> = ({
   label,
   value,
@@ -38,12 +51,20 @@ const StatCard: React.FC<{ label: string; value: number; href: string }> = ({
   <Box
     as="a"
     href={href}
-    variant="white"
-    p="lg"
-    style={{ borderRadius: "8px", flex: "1 1 220px", textDecoration: "none" }}
+    bg="container"
+    color="text"
+    p="xl"
+    border="1px solid"
+    borderColor="border"
+    style={{ borderRadius: "8px", textDecoration: "none", display: "block" }}
   >
-    <Text opacity={0.7}>{label}</Text>
-    <H2 mt="sm">{value.toLocaleString()}</H2>
+    <Text color="grey60" style={{ fontSize: "13px", letterSpacing: "0.02em" }}>
+      {label}
+    </Text>
+    {/* H2 ships a hardcoded `margin: 48px 0 32px`, which the mt/mb props lose to. */}
+    <H2 color="text" style={{ margin: "4px 0 0", lineHeight: 1.15 }}>
+      {value.toLocaleString()}
+    </H2>
   </Box>
 );
 
@@ -60,31 +81,44 @@ const Dashboard: React.FC = () => {
 
   return (
     <Box variant="grey">
-      <Box variant="white" p="xl" m="xl" style={{ borderRadius: "8px" }}>
-        <H2>NRS TaxChat Admin</H2>
-        <Text mt="default">
-          Welcome to the NRS TaxChat administration panel. Use the sidebar to manage taxpayers,
-          sessions, service requests, notifications, conversations, and audit logs.
+      <Box
+        bg="container"
+        color="text"
+        p="xl"
+        mb="xl"
+        border="1px solid"
+        borderColor="border"
+        style={{ borderRadius: "8px" }}
+      >
+        <H2 color="text" style={{ margin: "0 0 8px" }}>
+          NRS TaxChat Admin
+        </H2>
+        <Text color="grey60">
+          Manage taxpayers, sessions, service requests, notifications, conversations, and audit
+          logs from the sidebar.
         </Text>
       </Box>
 
-      <Box mx="xl" mb="xl">
-        <H5 mb="lg">At a glance</H5>
-        {error ? <Text>{error}</Text> : null}
-        {!stats && !error ? <Loader /> : null}
-        {stats ? (
-          <Box flex flexDirection="row" flexWrap="wrap" style={{ gap: "16px" }}>
-            {CARDS.map((card) => (
-              <StatCard
-                key={card.key}
-                label={card.label}
-                value={stats[card.key]}
-                href={card.href}
-              />
-            ))}
-          </Box>
-        ) : null}
-      </Box>
+      <H5 mb="lg" color="text">
+        At a glance
+      </H5>
+
+      {error ? <Text color="grey60">{error}</Text> : null}
+      {!stats && !error ? <Loader /> : null}
+
+      {stats ? (
+        <Box
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+            gap: "16px",
+          }}
+        >
+          {CARDS.map((card) => (
+            <StatCard key={card.key} label={card.label} value={stats[card.key]} href={card.href} />
+          ))}
+        </Box>
+      ) : null}
     </Box>
   );
 };
