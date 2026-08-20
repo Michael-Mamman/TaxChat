@@ -64,3 +64,23 @@ describe("message routing", () => {
     expect(replies.some((r) => /Welcome to NRS TaxChat/.test(r.body))).toBe(false);
   });
 });
+
+describe("stale selections", () => {
+  beforeAll(connectTestDb);
+  beforeEach(async () => {
+    await resetDb();
+    resetAI();
+  });
+  afterAll(disconnectTestDb);
+
+  it("shows the menu when a tap belongs to a finished conversation", async () => {
+    const bot = new Bot("2348030001801");
+    await bot.say("hi");
+
+    // "Dispute Assessment" from a conversation that has since ended.
+    const replies = await bot.tap("dispute");
+
+    expect(replies.some((r) => r.kind === "list")).toBe(true);
+    expect(replies.map((r) => r.body).join(" ")).not.toMatch(/Type MENU/i);
+  });
+});

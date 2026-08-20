@@ -257,11 +257,14 @@ class ConversationService {
     }
 
     console.log("[conversation.service::handleInteractiveResponse] branch: unknown selection");
-    // Unknown selection
+    // Unknown selection - usually a tap on a message from a conversation that
+    // has since finished. Show the menu rather than asking them to type MENU:
+    // they just tapped something, so they are already working by taps.
     await whatsappService.sendMessage(
       phone,
-      "I didn't understand that selection. Type MENU to see available services.",
+      "That option isn't available any more - it belongs to a request we've already finished.",
     );
+    await menuService.sendMainMenu(phone);
     console.log("[conversation.service::handleInteractiveResponse] EXIT", { reason: "unknown-selection" });
   }
 }
