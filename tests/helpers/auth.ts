@@ -30,3 +30,17 @@ export async function completeTier1(bot: Bot): Promise<Reply[]> {
   await bot.say(TEST_TIN);
   return bot.say(await currentOtp(bot.phone));
 }
+
+/** A well-formed NIN; the NIMC stub accepts any value. */
+export const TEST_NIN = "12345678901";
+
+/**
+ * Walk a bot through TIN + OTP + identity verification, leaving it at Tier 2.
+ *
+ * Tier 2 flows (TCC, profile update, assessment query) gate on NIN/BVN as well,
+ * so completeTier1 alone leaves the conversation still inside the auth sub-flow.
+ */
+export async function completeTier2(bot: Bot): Promise<Reply[]> {
+  await completeTier1(bot);
+  return bot.say(TEST_NIN);
+}

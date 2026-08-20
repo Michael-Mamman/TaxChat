@@ -190,12 +190,32 @@ class ProfileUpdateFlow {
         console.log('[profileUpdate.flow::handleInput] branch: case 2 - OTP verification');
         const otp = input.trim().replace(/\s/g, "");
 
+        // The taxpayer may tap a row from the earlier "which information would
+        // you like to update" list instead of typing a code. Treat that as
+        // switching field: answering every tap with "enter a valid 6-digit
+        // code" leaves them with no way forward at all.
+        const FIELD_IDS = ["email", "phone", "address", "business_address", "directors", "business_name"];
+        if (FIELD_IDS.includes(otp.toLowerCase())) {
+          console.log('[profileUpdate.flow::handleInput] branch: field re-selected during OTP step', { field: otp.toLowerCase() });
+          return this.handleInput(phone, otp.toLowerCase(), 0, data);
+        }
+
+        if (/^resend$/i.test(otp)) {
+          console.log('[profileUpdate.flow::handleInput] branch: OTP resend requested');
+          return {
+            message: "I've sent a new verification code. Please enter the 6-digit code:",
+            next_step: 2,
+            awaiting_input: "otp",
+          };
+        }
+
         if (!/^\d{6}$/.test(otp)) {
           console.log('[profileUpdate.flow::handleInput] branch: invalid OTP format');
           console.log('[profileUpdate.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'otp' });
           return {
             message:
-              "Please enter a valid *6-digit* verification code:",
+              "I'm waiting for the *6-digit verification code* I sent you.\n\n" +
+              "Reply *RESEND* for a new code, *MENU* to start over, or *AGENT* to speak with an officer.",
             next_step: 2,
             awaiting_input: "otp",
           };
