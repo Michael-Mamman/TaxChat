@@ -26,6 +26,14 @@ class JTBService {
     console.log("[JTB] lookupTIN stub called:", JSON.stringify(params));
 
     console.log("[jtb.service::lookupTIN] EXIT", { status: 200, resultCount: 2 });
+    // Reflect the name that was searched for. Returning a fixed name means a
+    // taxpayer searching for themselves is shown somebody else's record, which
+    // reads as a data leak even though the data is synthetic.
+    const searchedName = (params.name ?? "").trim() || "Amina Bello Ibrahim";
+    const parts = searchedName.split(/\s+/);
+    const firstName = parts[0] ?? searchedName;
+    const lastName = parts.length > 1 ? parts[parts.length - 1]! : firstName;
+
     return {
       success: true,
       message: "TIN lookup completed successfully (stub)",
@@ -33,9 +41,9 @@ class JTBService {
       data: [
         {
           tin: "1234567890",
-          taxpayer_name: "Amina Bello Ibrahim",
-          first_name: "Amina",
-          last_name: "Ibrahim",
+          taxpayer_name: searchedName,
+          first_name: firstName,
+          last_name: lastName,
           tax_type: "Personal Income Tax",
           tax_office: "Nassarawa Tax Office, Jos",
           registration_date: "2019-04-15",
@@ -45,9 +53,9 @@ class JTBService {
         },
         {
           tin: "1234567891",
-          taxpayer_name: "Amina Bello",
-          first_name: "Amina",
-          last_name: "Bello",
+          taxpayer_name: `${firstName} ${lastName}`,
+          first_name: firstName,
+          last_name: lastName,
           tax_type: "Personal Income Tax",
           tax_office: "Bukuru Tax Office, Jos",
           registration_date: "2021-08-22",
