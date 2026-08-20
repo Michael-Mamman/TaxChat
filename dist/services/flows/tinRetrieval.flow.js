@@ -1,4 +1,6 @@
 import jtbService from "../integrations/jtb.service.js";
+import documentService from "../documents/document.service.js";
+import { randomReference } from "../../utils/reference.js";
 /**
  * TIN Retrieval Flow (Tier 1 - Self-service)
  *
@@ -279,23 +281,34 @@ class TinRetrievalFlow {
                         flow_complete: true,
                     };
                 }
-                if (choice === "send_whatsapp" || choice === "send on whatsapp" || choice === "whatsapp") {
-                    console.log('[tinRetrieval.flow::handleInput] branch: send_whatsapp');
-                    console.log('[tinRetrieval.flow::handleInput] EXIT', { flow_complete: true });
+                if (choice === "send_whatsapp" ||
+                    choice === "send on whatsapp" ||
+                    choice === "whatsapp" ||
+                    // Email delivery is not wired up, so send the certificate here rather
+                    // than promising an inbox that nothing will reach.
+                    choice === "send_email" ||
+                    choice === "send via email" ||
+                    choice === "email") {
+                    const name = data.taxpayer_name;
+                    const tin = data.selected_tin;
+                    const reference = `TIN-${randomReference()}`;
+                    console.log('[tinRetrieval.flow::handleInput] branch: issuing TIN certificate', { reference });
+                    const certificate = await documentService.generateTINCertificate({
+                        reference,
+                        taxpayerName: name,
+                        tin,
+                        taxOffice: data.tax_office ?? "Nigeria Revenue Service",
+                    });
                     return {
-                        message: `Your TIN certificate for *${data.taxpayer_name}* has been requested.\n\n` +
-                            "Quote your TIN at your tax office to collect the certificate.\n\n" +
+                        message: `Here is the TIN certificate for *${name}*.\n\n` +
+                            `*Reference:* ${reference}\n\n` +
+                            "_It shows your TIN in full - keep it secure._\n\n" +
                             "Is there anything else I can help you with?",
-                        flow_complete: true,
-                    };
-                }
-                if (choice === "send_email" || choice === "send via email" || choice === "email") {
-                    console.log('[tinRetrieval.flow::handleInput] branch: send_email');
-                    console.log('[tinRetrieval.flow::handleInput] EXIT', { flow_complete: true });
-                    return {
-                        message: `I've recorded your request for *${data.taxpayer_name}*'s TIN certificate.\n\n` +
-                            "Quote your TIN at your tax office to collect it.\n\n" +
-                            "Is there anything else I can help you with?",
+                        document: {
+                            path: certificate.path,
+                            filename: certificate.filename,
+                            caption: `NRS TIN Certificate - ${name}`,
+                        },
                         flow_complete: true,
                     };
                 }

@@ -1,5 +1,7 @@
 import taxPromaxService from "../integrations/taxpromax.service.js";
 import itsmService from "../integrations/itsm.service.js";
+import documentService from "../documents/document.service.js";
+import { randomReference } from "../../utils/reference.js";
 /**
  * Tax Clearance Certificate (TCC) Flow (Tier 2 - Requires authentication)
  *
@@ -64,16 +66,34 @@ class TaxClearanceFlow {
                 const choice = input.trim().toLowerCase();
                 // Compliant path -- user chooses delivery
                 if (data.is_compliant) {
+                    // Generate once for either delivery choice.
+                    const reference = data.tcc_reference ?? `TCC-${randomReference()}`;
+                    const validUntil = `31 December ${new Date().getFullYear()}`;
+                    data.tcc_reference = reference;
+                    const needsCertificate = ["download", "download tcc", "email", "send via email"].includes(choice);
+                    const certificate = needsCertificate
+                        ? await documentService.generateTCC({
+                            reference,
+                            taxpayerName: data.taxpayer_name ?? "Taxpayer",
+                            tin: data.tin ?? "",
+                            validUntil,
+                        })
+                        : null;
                     console.log('[taxClearance.flow::handleInput] branch: compliant path');
                     if (choice === "download" || choice === "download tcc") {
                         console.log('[taxClearance.flow::handleInput] branch: download TCC');
                         console.log('[taxClearance.flow::handleInput] EXIT', { flow_complete: true });
                         return {
-                            message: "Your Tax Clearance Certificate has been approved.\n\n" +
-                                "Quote the reference below to collect it, or to have it re-issued at your tax office.\n\n" +
-                                `*TCC Reference:* TCC-${Date.now().toString().slice(-8)}\n` +
-                                `*Valid Until:* 31st December ${new Date().getFullYear()}\n\n` +
+                            message: "Your Tax Clearance Certificate is attached.\n\n" +
+                                `*TCC Reference:* ${reference}\n` +
+                                `*Valid Until:* ${validUntil}\n\n` +
+                                "Anyone can check it is genuine by scanning the code on the certificate.\n\n" +
                                 "Is there anything else I can help you with?",
+                            document: {
+                                path: certificate.path,
+                                filename: certificate.filename,
+                                caption: `NRS Tax Clearance Certificate - ${reference}`,
+                            },
                             flow_complete: true,
                         };
                     }
@@ -81,11 +101,16 @@ class TaxClearanceFlow {
                         console.log('[taxClearance.flow::handleInput] branch: email TCC');
                         console.log('[taxClearance.flow::handleInput] EXIT', { flow_complete: true });
                         return {
-                            message: "Your Tax Clearance Certificate has been approved.\n\n" +
-                                `*TCC Reference:* TCC-${Date.now().toString().slice(-8)}\n` +
-                                `*Valid Until:* 31st December ${new Date().getFullYear()}\n\n` +
-                                "Quote the reference above to collect it at your tax office.\n\n" +
+                            message: "Your Tax Clearance Certificate is attached.\n\n" +
+                                `*TCC Reference:* ${reference}\n` +
+                                `*Valid Until:* ${validUntil}\n\n` +
+                                "Anyone can check it is genuine by scanning the code on the certificate.\n\n" +
                                 "Is there anything else I can help you with?",
+                            document: {
+                                path: certificate.path,
+                                filename: certificate.filename,
+                                caption: `NRS Tax Clearance Certificate - ${reference}`,
+                            },
                             flow_complete: true,
                         };
                     }

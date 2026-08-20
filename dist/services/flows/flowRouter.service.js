@@ -1,3 +1,4 @@
+import fs from "fs/promises";
 import authService from "../auth/auth.service.js";
 import ConversationContext from "../../models/conversationContext.model.js";
 import whatsappService from "../whatsapp/whatsapp.service.js";
@@ -169,6 +170,27 @@ class FlowRouterService {
         else if (result.message) {
             console.log('[flowRouter.service::processFlowResult] branch: sending message');
             await whatsappService.sendMessage(phone, result.message);
+        }
+        // Deliver a generated document, if the flow produced one. Failure here must
+        // not lose the rest of the reply: the taxpayer still has their reference.
+        if (result.document) {
+            console.log('[flowRouter.service::processFlowResult] branch: sending document', { filename: result.document.filename });
+            try {
+                const mediaId = await whatsappService.uploadMedia(result.document.path, "application/pdf");
+                await whatsappService.sendDocument(phone, mediaId, result.document.filename, result.document.caption);
+            }
+            catch (err) {
+                console.error('[flowRouter.service::processFlowResult] document delivery failed', {
+                    filename: result.document.filename,
+                    error: err instanceof Error ? err.message : String(err),
+                });
+                await whatsappService.sendMessage(phone, "I couldn't attach your document just now. Quote the reference above at your tax office, or type *AGENT* and an officer will send it.");
+            }
+            finally {
+                // The file exists only to be uploaded; leaving it fills the disk with
+                // documents containing taxpayer data.
+                await fs.rm(result.document.path, { force: true }).catch(() => { });
+            }
         }
         // Handle escalation. Persist first: escalateToAgent can fail, in which case
         // the taxpayer is told to retry later and must not lose their progress.
