@@ -32,3 +32,26 @@ describe("outbound dispatch", () => {
     expect(reply.body.length).toBeGreaterThan(0);
   });
 });
+
+describe("flow completion", () => {
+  beforeAll(connectTestDb);
+  beforeEach(async () => {
+    await resetDb();
+    resetAI();
+  });
+  afterAll(disconnectTestDb);
+
+  it("closes the conversation once, not twice", async () => {
+    const bot = new Bot("2348030000801");
+    await bot.pick("tin_retrieval");
+    await completeTier1(bot);
+    await bot.say("Amina Bello Ibrahim");
+    await bot.pick("nin");
+    await bot.say("12345678901");
+    await bot.say("1");
+
+    const replies = await bot.tap("done");
+    const closers = replies.filter((r) => /anything else/i.test(r.body));
+    expect(closers).toHaveLength(1);
+  });
+});
