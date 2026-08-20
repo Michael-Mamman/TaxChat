@@ -1,6 +1,8 @@
 import type { FlowStepResult } from "../../types/conversation.types.js";
 import taxProMaxService from "../integrations/taxpromax.service.js";
 import itsmService from "../integrations/itsm.service.js";
+import documentService from "../documents/document.service.js";
+import { randomReference } from "../../utils/reference.js";
 
 /**
  * Assessment Query Flow (Tier 1 - Self-service)
@@ -276,12 +278,36 @@ class AssessmentQueryFlow {
         }
 
         if (choice === "download" || choice === "download statement") {
-          console.log('[assessmentQuery.flow::handleInput] branch: download statement');
-          console.log('[assessmentQuery.flow::handleInput] EXIT', { next_step: 2, awaiting_input: 'post_download_action' });
+          const reference = `STMT-${randomReference()}`;
+          const assessments =
+            (data.assessments as Array<{
+              tax_type: string;
+              period?: string;
+              tax_year?: number;
+              assessed_amount: number;
+              paid_amount: number;
+              balance: number;
+              status: string;
+              due_date?: string;
+            }>) ?? [];
+
+          console.log('[assessmentQuery.flow::handleInput] branch: issuing assessment statement', { reference, rows: assessments.length });
+          const statement = await documentService.generateAssessmentStatement({
+            reference,
+            tin: (data.tin as string) ?? "",
+            assessments,
+          });
+
           return {
             message:
-              "I've requested your assessment statement. Quote your TIN at your tax office to collect it.\n\n" +
+              "Your assessment statement is attached.\n\n" +
+              `*Statement reference:* ${reference}\n\n` +
               "Is there anything else I can help you with?",
+            document: {
+              path: statement.path,
+              filename: statement.filename,
+              caption: `NRS Assessment Statement - ${reference}`,
+            },
             buttons: [
               { id: "dispute", title: "Dispute Assessment" },
               { id: "done", title: "I'm Done" },

@@ -1,13 +1,13 @@
 /**
  * The bot must not promise something it cannot do.
  *
- * Nothing in the codebase generates a document, and nothing calls
- * whatsappService.sendDocument, so any message saying a PDF is on its way is
- * untrue. Three flows said exactly that. There is also no SMS gateway.
+ * Documents are now generated and sent over WhatsApp, so saying a certificate
+ * is attached is true. Email and SMS are still unwired - sendEmail has no
+ * callers and EMAIL_SERVICE_URL is unset, SMS_GATEWAY_URL likewise - so any
+ * message pointing the taxpayer at an inbox is still a promise we cannot keep.
  *
- * These checks are deliberately written against the source rather than a
- * conversation: the promise is in the copy, and that is where it must not
- * come back.
+ * These check the source rather than a conversation, because the promise lives
+ * in the copy and that is where it must not come back.
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
@@ -21,47 +21,51 @@ function flowSources(): Array<{ file: string; src: string }> {
 }
 
 describe("honest promises", () => {
-  it("nothing actually sends a document yet", () => {
-    // Guards the premise of every check below. If a flow starts genuinely
-    // delivering documents, this fails and the copy can promise one again.
-    const callers = readdirSync("src/services/flows")
-      .map((f) => readFileSync(`${FLOW_DIR}/${f}`, "utf8"))
-      .filter((src) => /sendDocument|uploadMedia/.test(src));
-
-    expect(callers).toHaveLength(0);
+  it("still cannot send email", () => {
+    // The premise behind the email rule below. If a flow ever genuinely calls
+    // sendEmail, this fails and the inbox wording is allowed back.
+    const callers = flowSources().filter(({ src }) => /sendEmail/.test(src));
+    expect(callers.map((c) => c.file)).toEqual([]);
   });
 
-  it("nothing actually sends an email yet", () => {
-    // sendEmail is defined but never called, and EMAIL_SERVICE_URL is unset.
-    const callers = readdirSync(FLOW_DIR)
-      .map((f) => readFileSync(`${FLOW_DIR}/${f}`, "utf8"))
-      .filter((src) => /sendEmail/.test(src));
-
-    expect(callers).toHaveLength(0);
-  });
-
-  it("no flow claims something will be delivered", () => {
-    // Deliberately broad. The first version of this test only looked for PDF
-    // wording and missed "will be sent to your registered email address",
-    // which is the promise a taxpayer actually reported not receiving.
+  it("no flow points the taxpayer at an inbox", () => {
     const CLAIMS = [
-      /will be sent as a PDF/i,
-      /receive the document in this chat/i,
-      /receive it as a PDF/i,
-      /as a PDF in this chat/i,
-      /will be sent to your registered (email|phone)/i,
+      /will be sent to your registered email/i,
       /check your inbox/i,
       /spam folder/i,
-      /receive an SMS/i,
-      /sent via SMS/i,
     ];
 
     const offenders: string[] = [];
     for (const { file, src } of flowSources()) {
       for (const claim of CLAIMS) {
-        const line = src.split("\n").find((l) => claim.test(l) && !l.trimStart().startsWith("//"));
+        const line = src
+          .split("\n")
+          .find((l) => claim.test(l) && !l.trimStart().startsWith("//"));
         if (line) offenders.push(`${file}: ${line.trim().slice(0, 70)}`);
       }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  it("no flow promises an SMS", () => {
+    // SMS_GATEWAY_URL is unset and the SMS service is a stub.
+    const offenders = flowSources()
+      .filter(({ src }) => /receive an SMS|notification via SMS|sent via SMS/i.test(src))
+      .map(({ file }) => file);
+
+    expect(offenders).toEqual([]);
+  });
+
+  it("no flow says a document will arrive later", () => {
+    // Documents are sent in the same turn now, so "shortly" is wrong even
+    // though delivery works.
+    const offenders: string[] = [];
+    for (const { file, src } of flowSources()) {
+      const line = src
+        .split("\n")
+        .find((l) => /in this chat shortly|will be sent as a PDF/i.test(l) && !l.trimStart().startsWith("//"));
+      if (line) offenders.push(`${file}: ${line.trim().slice(0, 70)}`);
     }
 
     expect(offenders).toEqual([]);
