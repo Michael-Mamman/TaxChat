@@ -56,6 +56,39 @@ const start = async () => {
             provider,
         }, null, sessionOptions);
         console.log('[app::start] authenticated AdminJS router built');
+        /**
+         * Theme preference. AdminJS binds its ThemeProvider to `window.THEME` once
+         * at bundle load, so a theme cannot be swapped client-side; what it does
+         * honour is `currentAdmin.theme` when it renders. Persist the choice on the
+         * session here and let the page reload pick it up.
+         *
+         * Registered after buildAuthenticatedRouter so the session, auth and
+         * protected-route middleware all apply - and safe to add last because
+         * AdminJS registers only specific paths, no catch-all.
+         */
+        const allowedThemes = new Set((options.availableThemes ?? []).map((t) => t.id));
+        router.post("/set-theme", (req, res) => {
+            const theme = String(req.query?.theme ?? "");
+            console.log('[app::setTheme] ENTER', { theme });
+            if (!allowedThemes.has(theme)) {
+                console.log('[app::setTheme] branch: unknown theme');
+                return res.status(400).json({ ok: false, error: "unknown theme" });
+            }
+            if (!req.session?.adminUser) {
+                console.log('[app::setTheme] branch: no admin session');
+                return res.status(401).json({ ok: false, error: "not authenticated" });
+            }
+            req.session.adminUser = { ...req.session.adminUser, theme };
+            return req.session.save((err) => {
+                if (err) {
+                    console.log('[app::setTheme] branch: session save failed');
+                    return res.status(500).json({ ok: false, error: "could not save preference" });
+                }
+                console.log('[app::setTheme] EXIT', { theme });
+                return res.json({ ok: true, theme });
+            });
+        });
+        console.log('[app::start] /admin/set-theme route mounted');
         app.use(admin.options.rootPath, router);
         if (process.env.NODE_ENV === "production") {
             console.log('[app::start] branch: production - initializing AdminJS');
