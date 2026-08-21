@@ -145,9 +145,9 @@ const Dashboard: React.FC = () => {
             <Panel title="Service requests by status" subtitle="All requests on record">
               <BarChart data={stats.requestsByStatus} />
             </Panel>
-            <Panel title="Service requests by type" subtitle="Top categories">
+            {/* <Panel title="Service requests by type" subtitle="Top categories">
               <BarChart data={stats.requestsByType} />
-            </Panel>
+            </Panel> */}
             <Panel title="Taxpayers by authentication tier" subtitle="Tier 0 unauthenticated → Tier 3 full KYC">
               <BarChart data={stats.taxpayersByTier} ordinal />
             </Panel>
